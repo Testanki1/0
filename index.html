@@ -43,6 +43,7 @@
           --md-sys-color-surface-container-high: rgba(0, 25, 38, 0.5);
       }
 
+      html, body { width: 100%; height: 100%; }
       body {
           margin: 0;
           overflow: hidden;
@@ -152,7 +153,7 @@
       #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
 
       .ui-layer {
-          position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
+          position: fixed; inset: 0; width: 100%; height: 100%; z-index: 10;
           pointer-events: none;
           display: flex; flex-direction: column; justify-content: space-between;
           padding: 16px;
@@ -415,8 +416,10 @@
       html[data-zone="snow"] { --md-sys-color-primary:#00d4ff; --md-sys-color-on-primary-container:#00d4ff; --md-sys-color-primary-container:rgba(0,212,255,.2); --theme-glow:rgba(0,212,255,.6); }
       html[data-zone="space"] { --md-sys-color-primary:#ffcc00; --md-sys-color-on-primary-container:#ffcc00; --md-sys-color-primary-container:rgba(255,204,0,.2); --theme-glow:rgba(255,204,0,.6); }
       html[data-zone="halloween"] { --md-sys-color-primary:#ff8a2a; --md-sys-color-on-primary-container:#ff8a2a; --md-sys-color-primary-container:rgba(255,138,42,.2); --theme-glow:rgba(255,138,42,.6); }
-      #viewport { position:absolute; inset:0; z-index:1; }
-      canvas {display:block; touch-action:none;}
+      #viewport { position:fixed; inset:0; width:100%; height:100%; z-index:1; }
+      /* Dynamic viewport height follows phone browser chrome and orientation. */
+      @supports (height: 100dvh) { #viewport, .ui-layer { height:100dvh; } }
+      canvas {display:block; touch-action:none; width:100% !important; height:100% !important;}
       .world-switch { position:absolute; top:16px; left:16px; pointer-events:auto; z-index:30; }
       #world-menu-toggle { width:48px; height:48px; }
       #world-menu {position:absolute; top:56px; left:0; width:240px; padding:10px !important;}
@@ -949,8 +952,8 @@
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
       controls.enablePan = false;
-      controls.minPolarAngle = 0.05;
-      controls.maxPolarAngle = Math.PI / 2 - 0.05;
+      controls.minPolarAngle = 0;
+      controls.maxPolarAngle = Math.PI;
       const amb = new THREE.AmbientLight(0xffffff, 1);
       scene.add(amb);
       const light = new THREE.DirectionalLight(0xffdfb0, 1.5);
@@ -1948,8 +1951,8 @@
           const [min, max, dist] = zones[id].camera;
           controls.minDistance = min;
           controls.maxDistance = max;
-          controls.maxPolarAngle =
-            id === "cyber" ? Math.PI - 0.05 : Math.PI / 2 - 0.05;
+          controls.minPolarAngle = id === "cyber" ? 0.05 : 0;
+          controls.maxPolarAngle = id === "cyber" ? Math.PI - 0.05 : Math.PI;
           // Clear residual OrbitControls damping from the previous scene.
           const damping = controls.enableDamping;
           controls.enableDamping = false;
@@ -1990,12 +1993,9 @@
           // per scene, so revisiting a turned tank also starts behind it.
           let initialOffset;
           if (id === "cyber") {
-            initialOffset = v(0, 4, 12).applyAxisAngle(v(0, 1, 0), Math.PI);
-            const axis = v()
-              .crossVectors(v(0, 1, 0), initialOffset)
-              .normalize();
-            initialOffset.applyAxisAngle(axis, 0.4);
+            // Pull back and lift the view while keeping it behind the tank.
             controls.target.y += 1.5;
+            initialOffset = v(0, 12, -24);
           } else if (id === "snow") {
             initialOffset = v(-40, 35, 0);
           } else if (id === "space") {
@@ -2004,7 +2004,7 @@
             initialOffset = v(-Math.hypot(dist * 0.6, dist), dist * 0.65, 0);
           }
           initialOffset.applyAxisAngle(v(0, 1, 0), player.yaw);
-          camera.position.copy(cameraStart).add(initialOffset);
+          camera.position.copy(controls.target).add(initialOffset);
           if (id !== "cyber" && spectator) {
             camera.lookAt(cameraStart);
             camera.rotation.reorder("YXZ");
@@ -2679,13 +2679,8 @@
           !document.documentElement.requestFullscreen
         )
           return;
-        document.documentElement
-          .requestFullscreen()
-          .then(() => {
-            if (screen.orientation?.lock)
-              screen.orientation.lock("landscape").catch(() => {});
-          })
-          .catch(() => {});
+        // Do not lock the device to landscape: portrait is supported too.
+        document.documentElement.requestFullscreen().catch(() => {});
       });
       $("about").onclick = () => {
         const names = {
@@ -2952,12 +2947,52 @@
         },
         true,
       );
-      window.addEventListener("resize", () => {
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(innerWidth, innerHeight);
-        camera.aspect = innerWidth / innerHeight;
-        camera.updateProjectionMatrix();
-      });
+      // Mobile browsers can deliver orientation, viewport and fullscreen
+      // changes in separate phases. Anchor UI to the live viewport and resync
+      // the camera/drawing buffer after those phases have settled.
+      let viewportFrame = 0,
+        viewportTimers = [],
+        lastViewportWidth = 0,
+        lastViewportHeight = 0,
+        lastPixelRatio = 0;
+      function syncViewport() {
+        const rect = $("viewport").getBoundingClientRect();
+        const width = Math.round(rect.width),
+          height = Math.round(rect.height);
+        const ratio = window.devicePixelRatio || 1;
+        if (width < 1 || height < 1) return;
+        if (
+          width !== lastViewportWidth ||
+          height !== lastViewportHeight ||
+          ratio !== lastPixelRatio
+        ) {
+          lastViewportWidth = width;
+          lastViewportHeight = height;
+          lastPixelRatio = ratio;
+          renderer.setPixelRatio(ratio);
+          renderer.setSize(width, height);
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+        }
+      }
+      function scheduleViewportSync() {
+        syncViewport();
+        cancelAnimationFrame(viewportFrame);
+        viewportFrame = requestAnimationFrame(() => {
+          syncViewport();
+          viewportFrame = requestAnimationFrame(syncViewport);
+        });
+        viewportTimers.forEach(clearTimeout);
+        viewportTimers = [80, 300, 800].map((ms) =>
+          setTimeout(syncViewport, ms),
+        );
+      }
+      window.addEventListener("resize", scheduleViewportSync);
+      window.addEventListener("orientationchange", scheduleViewportSync);
+      document.addEventListener("fullscreenchange", scheduleViewportSync);
+      window.visualViewport?.addEventListener("resize", scheduleViewportSync);
+      screen.orientation?.addEventListener?.("change", scheduleViewportSync);
+      syncViewport();
 
       const labelMap = {
         cyber: tr("赛博坦克", "CyberTank"),
@@ -2997,5 +3032,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5318d249f68f13a',t:'MTc5MzQzODA4NQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5318d249f68f13a',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a531a94b09027815',t:'MTc5MzQzOTIzOA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a531a94b09027815',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
