@@ -401,19 +401,26 @@
       html[data-zone="halloween"] { --md-sys-color-primary:#ff8a2a; --md-sys-color-on-primary-container:#ff8a2a; --md-sys-color-primary-container:rgba(255,138,42,.2); --theme-glow:rgba(255,138,42,.6); }
       #viewport { position:absolute; inset:0; z-index:1; }
       canvas {display:block; touch-action:none;}
-      .world-switch { position:absolute; top:16px; left:16px; pointer-events:auto; max-width:calc(100% - 220px); z-index:12; padding:10px 14px !important; }
-      .world-tabs {display:flex; gap:6px; flex-wrap:wrap;}
-      .world-tabs button, .world-tools button {font: 500 12px 'Rubik','M PLUS 1p',sans-serif; border-radius:100px; padding:7px 11px; color:var(--md-sys-color-on-surface); border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.08); cursor:pointer;}
+      .world-switch { position:absolute; top:16px; left:16px; pointer-events:auto; z-index:30; }
+      #world-menu-toggle { width:48px; height:48px; }
+      #world-menu {position:absolute; top:56px; left:0; width:200px; padding:10px !important;}
+      .world-tabs {display:flex; flex-direction:column; gap:4px;}
+      .world-tabs button {text-align:left; font:500 14px 'Rubik','M PLUS 1p',sans-serif; border-radius:14px; padding:11px 14px; color:var(--md-sys-color-on-surface); border:0; background:transparent; cursor:pointer;}
+      .world-tabs button:hover {background:rgba(255,255,255,.1);}
       .world-tabs button.active {color:var(--md-sys-color-on-primary); background:var(--md-sys-color-primary);}
-      .world-tools {display:flex; gap:6px; margin-top:7px;}
-      #zone-status {font-size:11px; margin-top:6px; opacity:.7;}
+      #zone-status {font-size:11px; margin:8px 12px 4px; opacity:.7;}
+      .initial-options {display:grid;grid-template-columns:1fr 1fr; gap:10px; width:100%;}
+      .initial-options button {border-radius:16px; height:auto; min-height:54px;}
+      .initial-status {font-size:12px; opacity:.7; margin-top:14px;}
+      .progress-indeterminate {width:32% !important; animation:indeterminate 1.3s infinite ease-in-out;}
+      @keyframes indeterminate {0% {transform:translateX(-110%)} 100% {transform:translateX(330%)}}
+      .load-error-actions {display:flex;gap:12px;margin-top:20px;}
       #touch-ui {display:none;}
       #touch-ui.touch-enabled {display:block;}
       @media(pointer:coarse) { #touch-ui {display:block;} }
       @media(max-width:650px) {
-          .world-switch {top:8px; left:8px; max-width:calc(100% - 200px); padding:8px !important;}
-          .world-tabs {gap:2px;} .world-tabs button,.world-tools button {font-size:10px; padding:5px 7px;}
-          #zone-status {display:none;} .ui-layer {padding:8px;}
+          .world-switch {top:8px; left:8px;}
+          .ui-layer {padding:8px;}
           .score-card.m3-card.compact {padding:10px 12px; min-width:0; gap:8px;}
           #joystick-zone {width:110px;height:110px;left:15px;bottom:15px;}
           #jump-btn {width:72px;height:72px;right:15px;bottom:15px;}
@@ -432,18 +439,58 @@
   <body>
     <div id="viewport"></div>
     <div id="ui-layer" class="ui-layer">
-      <div class="world-switch m3-card compact">
-        <div class="world-tabs">
-          <button data-zone="cyber">赛博</button
-          ><button data-zone="snow">冰雪</button
-          ><button data-zone="space">太空</button
-          ><button data-zone="halloween">万圣节</button>
+      <div id="world-switch" class="world-switch hidden">
+        <button
+          id="world-menu-toggle"
+          class="m3-btn-icon"
+          aria-expanded="false"
+          aria-controls="world-menu"
+          title="选择场景"
+        >
+          <span class="material-symbols-rounded">menu</span>
+        </button>
+        <div id="world-menu" class="m3-card compact hidden">
+          <div class="world-tabs">
+            <button data-zone="cyber">赛博</button
+            ><button data-zone="snow">冰雪</button
+            ><button data-zone="space">太空</button
+            ><button data-zone="halloween">万圣节</button>
+          </div>
+          <div id="zone-status"></div>
         </div>
-        <div id="zone-status"></div>
+      </div>
+      <div id="initial-select" class="fullscreen-overlay overlay-bg-dark">
+        <div
+          class="m3-card modal-content animate-scaleIn"
+          style="width: min(360px, 80vw); align-items: center"
+        >
+          <div class="modal-icon">
+            <span class="material-symbols-rounded">public</span>
+          </div>
+          <h1 id="select-title" class="modal-title">选择场景</h1>
+          <p id="select-desc" class="modal-desc">选择一个场景后再开始加载</p>
+          <div class="initial-options">
+            <button class="m3-btn-primary" data-initial-zone="cyber" disabled>
+              赛博</button
+            ><button class="m3-btn-primary" data-initial-zone="snow" disabled>
+              冰雪</button
+            ><button class="m3-btn-primary" data-initial-zone="space" disabled>
+              太空</button
+            ><button
+              class="m3-btn-primary"
+              data-initial-zone="halloween"
+              disabled
+            >
+              万圣节
+            </button>
+          </div>
+          <p id="initial-status" class="initial-status">正在初始化…</p>
+        </div>
       </div>
       <!-- Header & Controls (Top Right) -->
       <div
-        class="header-row pointer-events-auto"
+        id="game-header"
+        class="header-row pointer-events-auto hidden"
         style="
           justify-content: flex-end;
           flex-direction: column;
@@ -572,11 +619,15 @@
       </div>
 
       <!-- Original loading and tap-to-start presentation -->
-      <div id="loading" class="fullscreen-overlay overlay-bg-dark">
+      <div id="loading" class="fullscreen-overlay overlay-bg-dark hidden">
         <div class="loading-container">
           <div id="loading-bar-container"><div id="loading-bar"></div></div>
           <p id="loading-text" class="loading-text">Loading 0%</p>
           <p id="loading-title" class="loading-text"></p>
+        </div>
+        <div id="load-error-actions" class="load-error-actions hidden">
+          <button id="load-retry" class="m3-btn-primary">重试</button
+          ><button id="load-back" class="m3-btn-primary">返回</button>
         </div>
       </div>
       <div id="welcome" class="fullscreen-overlay overlay-bg-dark hidden">
@@ -833,6 +884,8 @@
         jumpActive = false,
         respawnAnim = null,
         physicsAccumulator = 0,
+        previousPhysicsPosition = null,
+        previousPhysicsYaw = 0,
         lastGrounded = -1e4,
         cameraPrevAngle = 0,
         spaceTrack = [],
@@ -893,9 +946,110 @@
       const textureLoader = new THREE.TextureLoader(),
         hdrLoader = new RGBELoader(),
         exrLoader = new EXRLoader();
-      const loadGLB = (url) => loader.loadAsync(url),
-        loadTexture = (url) => textureLoader.loadAsync(url),
-        cdn = "https://web-cdn.tankionline.com/";
+      const cdn = "https://web-cdn.tankionline.com/";
+      let activeTracker = null;
+      function createTracker() {
+        const tracker = { items: [], lastUpdate: 0 };
+        tracker.render = (force = false) => {
+          if (activeTracker !== tracker) return;
+          const t = performance.now();
+          if (!force && t - tracker.lastUpdate < 80) return;
+          tracker.lastUpdate = t;
+          const loaded = tracker.items.reduce((a, x) => a + x.loaded, 0);
+          const unknown = tracker.items.some((x) => !x.total && !x.downloaded);
+          const total = tracker.items.reduce(
+            (a, x) => a + (x.total || x.loaded),
+            0,
+          );
+          const pending = tracker.items.some((x) => !x.parsed);
+          const mb = (n) => (n / 1048576).toFixed(2) + " MB";
+          let label = `${tr("已加载", "Loaded")} ${mb(loaded)}`;
+          if (!unknown && total > 0) {
+            label += ` / ${mb(total)}`;
+            if (!pending) label += " · 100%";
+            else if (tracker.items.every((x) => x.downloaded))
+              label += ` · ${tr("正在处理模型", "Processing models")}`;
+            else
+              label += ` · ${Math.min(99, Math.floor((100 * loaded) / total))}%`;
+            $("loading-bar").classList.remove("progress-indeterminate");
+            $("loading-bar").style.width =
+              (pending ? Math.min(99, (100 * loaded) / total) : 100) + "%";
+          } else {
+            label += ` · ${tr("总大小未知", "Total size unknown")}`;
+            $("loading-bar").classList.add("progress-indeterminate");
+          }
+          $("loading-text").textContent = label;
+        };
+        return tracker;
+      }
+      async function fetchTracked(url, decode) {
+        const tracker = activeTracker;
+        const item = {
+          url,
+          loaded: 0,
+          total: 0,
+          downloaded: false,
+          parsed: false,
+        };
+        tracker.items.push(item);
+        tracker.render(true);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`${response.status} ${url}`);
+        const length = Number(response.headers.get("content-length"));
+        if (length > 0 && !response.headers.get("content-encoding"))
+          item.total = length;
+        tracker.render(true);
+        let buffer;
+        if (response.body) {
+          const reader = response.body.getReader(),
+            chunks = [];
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            item.loaded += value.byteLength;
+            // Compressed transfers may advertise wire size while fetch yields decoded bytes.
+            if (item.total && item.loaded > item.total) item.total = 0;
+            tracker.render();
+          }
+          buffer = new Uint8Array(item.loaded);
+          let offset = 0;
+          for (const c of chunks) {
+            buffer.set(c, offset);
+            offset += c.byteLength;
+          }
+          buffer = buffer.buffer;
+        } else {
+          buffer = await response.arrayBuffer();
+          item.loaded = buffer.byteLength;
+        }
+        item.downloaded = true;
+        if (!item.total || item.total !== item.loaded) item.total = item.loaded;
+        tracker.render(true);
+        const result = await decode(buffer, url);
+        item.parsed = true;
+        tracker.render(true);
+        return result;
+      }
+      const loadGLB = (url) =>
+        fetchTracked(url, (buffer, source) =>
+          loader.parseAsync(
+            buffer,
+            new URL(".", new URL(source, location.href)).href,
+          ),
+        );
+      const loadObjectURL = (assetLoader, url) =>
+        fetchTracked(url, async (buffer) => {
+          const objectURL = URL.createObjectURL(new Blob([buffer]));
+          try {
+            return await assetLoader.loadAsync(objectURL);
+          } finally {
+            URL.revokeObjectURL(objectURL);
+          }
+        });
+      const loadTexture = (url) => loadObjectURL(textureLoader, url);
+      const loadHDR = (url) => loadObjectURL(hdrLoader, url);
+      const loadEXR = (url) => loadObjectURL(exrLoader, url);
       const soundPaths = {
         cyber: {
           music: "cybertank/assets/bounce tanki loop cut (no intro).opus",
@@ -942,11 +1096,6 @@
           () => $("toast").classList.remove("lap-animate"),
           2500,
         );
-      }
-      function progress(current, total) {
-        $("loading-text").textContent =
-          `${tr("加载中", "Loading")} ${Math.round((current / total) * 100)}%`;
-        $("loading-bar").style.width = (100 * current) / total + "%";
       }
       function colliderMesh(mesh) {
         mesh.updateWorldMatrix(true, false);
@@ -1018,7 +1167,7 @@
           [field, tank, env] = await Promise.all([
             loadGLB("cybertank/assets/Minigame_Synth_Scene.glb"),
             loadGLB("cybertank/assets/Minigame_Synth_Tank.glb"),
-            exrLoader.loadAsync(
+            loadEXR(
               "cybertank/assets/Minigame_Synth_Environment_4096x2048.exr",
             ),
           ]);
@@ -1029,6 +1178,7 @@
         group.position.copy(z.origin);
         group.add(field.scene);
         z.group = group;
+        group.visible = false;
         scene.add(group);
         addTerrain(group);
         const verts = [];
@@ -1076,7 +1226,7 @@
             loadGLB(cdn + "new-year/models/tank/tank.glb"),
             loadTexture(cdn + "new-year/sky.png"),
             loadTexture(cdn + "new-year/models/islands/lightmap.png"),
-            hdrLoader.loadAsync(cdn + "new-year/forest.hdr"),
+            loadHDR(cdn + "new-year/forest.hdr"),
           ]);
         z.bg = textureSky(sky);
         hdr.mapping = THREE.EquirectangularReflectionMapping;
@@ -1087,6 +1237,7 @@
         group.position.copy(z.origin);
         group.add(islands.scene);
         z.group = group;
+        group.visible = false;
         islands.scene.traverse((o) => {
           if (o.isMesh && o.material) {
             o.material.lightMap = lightmap;
@@ -1127,9 +1278,10 @@
             loadGLB("tanks-in-space/spiral6.glb"),
             loadTexture("tanks-in-space/beam_noise.png"),
             loadTexture(cdn + "darkmatter/sky2.webp"),
-            hdrLoader.loadAsync(cdn + "darkmatter/venice_sunset_1k.hdr"),
+            loadHDR(cdn + "darkmatter/venice_sunset_1k.hdr"),
           ]);
         z.group = new THREE.Group();
+        z.group.visible = false;
         scene.add(z.group);
         let models = {};
         names.forEach((n, i) => (models[n] = results[i].scene));
@@ -1299,7 +1451,7 @@
               .map((x) => loadGLB(cdn + "halloween/" + x))
               .concat(
                 loadTexture(cdn + "halloween/sky.png"),
-                hdrLoader.loadAsync(cdn + "darkmatter/venice_sunset_1k.hdr"),
+                loadHDR(cdn + "darkmatter/venice_sunset_1k.hdr"),
               ),
           );
         z.bg = textureSky(sky);
@@ -1308,6 +1460,7 @@
         const region = new THREE.Group();
         region.position.copy(z.origin);
         z.group = region;
+        region.visible = false;
         scene.add(region);
         for (let n = 1; n < 17; n++) {
           let src = small.scene.getObjectByName(
@@ -1533,29 +1686,63 @@
       }
       async function selectZone(id) {
         if (loading || !zones[id]) return;
-        if (player && id === zone) return;
+        if (player && id === zone) {
+          closeWorldMenu();
+          return;
+        }
+        const hadPlayer = !!player,
+          wasRunning = running;
         loading = true;
-        respawnAnim = null;
-        saveState();
-        zone = id;
-        document.documentElement.dataset.zone = id;
-        controls.enablePan = id === "cyber" && spectator;
-        physicsAccumulator = 0;
-        player = null;
         running = false;
         music.pause();
-        $("win").classList.add("hidden");
+        physicsAccumulator = 0;
+        if (respawnAnim) {
+          respawnAnim = null;
+          if (player) player.mesh.visible = true;
+        }
+        closeWorldMenu();
+        $("initial-select").classList.add("hidden");
         $("welcome").classList.add("hidden");
+        $("win").classList.add("hidden");
+        $("load-error-actions").classList.add("hidden");
         $("loading").classList.remove("hidden");
-        $("loading-title").textContent = "正在加载 " + zones[id].name;
-        progress(0, 1);
-        document
-          .querySelectorAll("[data-zone]")
-          .forEach((b) => b.classList.toggle("active", b.dataset.zone === id));
+        $("loading-title").textContent =
+          tr("正在加载 ", "Loading ") + zones[id].name;
+        activeTracker = createTracker();
+        $("loading-text").textContent = tr("准备下载…", "Preparing download…");
+        $("loading-bar").style.width = "0%";
+        $("loading-bar").classList.remove("progress-indeterminate");
+        // Allow the overlay to paint before cache hits or synchronous setup work.
+        await new Promise((resolve) => requestAnimationFrame(resolve));
         try {
           if (!zones[id].player) await loadZone[id]();
-          progress(1, 1);
+          else {
+            $("loading-text").textContent = tr(
+              "场景已缓存，正在准备…",
+              "Scene cached, preparing…",
+            );
+            $("loading-bar").classList.add("progress-indeterminate");
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+          }
+          $("loading-text").textContent = tr(
+            "资源下载完成，正在准备场景…",
+            "Download complete, preparing scene…",
+          );
+          $("loading-bar").classList.remove("progress-indeterminate");
+          $("loading-bar").style.width = "100%";
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          // Commit only when all fetches and model parsing for the target succeeded.
+          saveState();
+          zone = id;
+          document.documentElement.dataset.zone = id;
+          controls.enablePan = id === "cyber" && spectator;
+          document
+            .querySelectorAll("[data-zone]")
+            .forEach((b) =>
+              b.classList.toggle("active", b.dataset.zone === id),
+            );
           player = zones[id].player;
+          previousPhysicsPosition = null;
           restoreGraphics(zones[id]);
           player.mesh.visible = true;
           player.rigid.setEnabled(true);
@@ -1595,6 +1782,12 @@
             currentPosition.y,
             currentPosition.z,
           );
+          previousPhysicsPosition = cameraStart.clone();
+          previousPhysicsYaw = player.yaw;
+          player.mesh.position.copy(cameraStart);
+          if (id === "snow") player.mesh.position.y -= 1.5;
+          if (id === "space") player.mesh.position.y -= 0.15;
+          player.mesh.rotation.y = player.yaw;
           camera.position
             .copy(cameraStart)
             .add(v(dist * 0.6, dist * 0.65, dist));
@@ -1604,28 +1797,56 @@
           light.target.position.copy(cameraStart);
           scene.add(light.target);
           light.target.updateMatrixWorld();
+          $("world-switch").classList.remove("hidden");
+          $("game-header").classList.remove("hidden");
+          const continueDirectly = hadPlayer && wasRunning && !state.finished;
+          running = false;
           switchMusic();
           $("welcome-title").textContent = zones[id].name;
-          $("welcome-desc").textContent =
-            id === "space"
-              ? "穿越原始螺旋轨道。长按空格或飞行键，完成 6 圈。"
-              : id === "snow"
-                ? "驾驶原冰雪坦克逆时针前进，完成 6 圈。"
-                : "驾驶对应原坦克，依次经过路径，完成 6 圈。";
           $("start").textContent = state.finished
             ? tr("重新开始", "PLAY AGAIN")
             : tr("点击开始", "TAP TO START");
+          // Upload/render the newly selected scene behind the loading overlay.
+          renderer.render(scene, camera);
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          lastFrame = performance.now();
+          clock.getDelta();
+          physicsAccumulator = 0;
+          running = continueDirectly;
+          if (soundEnabled && running) music.play().catch(() => {});
           $("loading").classList.add("hidden");
-          $("welcome").classList.remove("hidden");
+          if (!continueDirectly) $("welcome").classList.remove("hidden");
           updateHUD();
         } catch (e) {
           console.error(e);
-          $("loading-title").textContent = "场景加载失败";
-          $("loading-text").textContent =
-            String(e) + "。请检查网络后刷新页面。";
-        } finally {
-          loading = false;
+          activeTracker = null;
+          $("loading-title").textContent = tr(
+            "场景加载失败",
+            "Scene loading failed",
+          );
+          $("loading-text").textContent = String(e);
+          $("loading-bar").classList.remove("progress-indeterminate");
+          $("load-error-actions").classList.remove("hidden");
+          $("load-retry").onclick = () => {
+            if (hadPlayer) running = wasRunning;
+            loading = false;
+            selectZone(id);
+          };
+          $("load-back").onclick = () => {
+            $("loading").classList.add("hidden");
+            if (hadPlayer) {
+              lastFrame = performance.now();
+              clock.getDelta();
+              physicsAccumulator = 0;
+              running = wasRunning;
+              if (soundEnabled && running) music.play().catch(() => {});
+            } else $("initial-select").classList.remove("hidden");
+            loading = false;
+          };
+          return;
         }
+        activeTracker = null;
+        loading = false;
       }
       function spawnForCheckpoint() {
         const z = zones[zone];
@@ -1646,6 +1867,9 @@
         if (rollBack) score = Math.min(102, checkpoint * 17);
         const p = spawnForCheckpoint();
         player.rigid.setTranslation(p, true);
+        previousPhysicsPosition = p.clone();
+        previousPhysicsYaw = player.yaw;
+        physicsAccumulator = 0;
         player.rigid.setLinvel({ x: 0, y: 0, z: 0 }, true);
         player.rigid.setAngvel({ x: 0, y: 0, z: 0 }, true);
         player.mesh.position.copy(p);
@@ -1998,6 +2222,9 @@
             physicsAccumulator += dt;
             const fixedStep = 1 / 60;
             while (physicsAccumulator >= fixedStep && running && !respawnAnim) {
+              const before = player.rigid.translation();
+              previousPhysicsPosition = v(before.x, before.y, before.z);
+              previousPhysicsYaw = player.yaw;
               world.timestep = fixedStep;
               world.step();
               const t = player.rigid.translation();
@@ -2025,22 +2252,24 @@
               return;
             }
           } else physicsAccumulator = 0;
-          const position = player.rigid.translation(),
-            p = v(position.x, position.y, position.z);
+          const position = player.rigid.translation();
+          const actualPosition = v(position.x, position.y, position.z);
+          if (!previousPhysicsPosition || !running)
+            previousPhysicsPosition = actualPosition.clone();
+          const alpha = running
+            ? Math.min(1, physicsAccumulator / (1 / 60))
+            : 1;
+          const p = previousPhysicsPosition.clone().lerp(actualPosition, alpha);
+          let yawDelta = player.yaw - previousPhysicsYaw;
+          while (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
+          while (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
+          const visualYaw = running
+            ? previousPhysicsYaw + yawDelta * alpha
+            : player.yaw;
           player.mesh.position.copy(p);
           if (zone === "snow") player.mesh.position.y -= 1.5;
           if (zone === "space") player.mesh.position.y -= 0.15;
-          player.mesh.rotation.y = player.yaw;
-          if (zone === "cyber")
-            player.rigid.setRotation(
-              {
-                x: 0,
-                y: Math.sin(player.yaw / 2),
-                z: 0,
-                w: Math.cos(player.yaw / 2),
-              },
-              true,
-            );
+          player.mesh.rotation.y = visualYaw;
           if (zone === "snow" || zone === "halloween") {
             let angle = Math.atan2(
                 p.x - zones[zone].origin.x,
@@ -2166,9 +2395,24 @@
         $("help").classList.remove("hidden");
       };
       $("close-help").onclick = () => $("help").classList.add("hidden");
+      function closeWorldMenu() {
+        $("world-menu").classList.add("hidden");
+        $("world-menu-toggle").setAttribute("aria-expanded", "false");
+      }
+      $("world-menu-toggle").onclick = (e) => {
+        e.stopPropagation();
+        const open = $("world-menu").classList.toggle("hidden") === false;
+        $("world-menu-toggle").setAttribute("aria-expanded", String(open));
+      };
+      document.addEventListener("click", (e) => {
+        if (!e.target.closest("#world-switch")) closeWorldMenu();
+      });
       document
         .querySelectorAll("[data-zone]")
         .forEach((b) => (b.onclick = () => selectZone(b.dataset.zone)));
+      document
+        .querySelectorAll("[data-initial-zone]")
+        .forEach((b) => (b.onclick = () => selectZone(b.dataset.initialZone)));
       window.addEventListener("keydown", (e) => {
         if (
           ["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
@@ -2292,8 +2536,26 @@
         "You've reached 102 points and finished all 6 laps.",
       );
       $("reset-btn-text").textContent = tr("再来一次", "PLAY AGAIN");
+      const labelMap = {
+        cyber: tr("赛博", "Cyber"),
+        snow: tr("冰雪", "Snow"),
+        space: tr("太空", "Space"),
+        halloween: tr("万圣节", "Halloween"),
+      };
+      document.querySelectorAll("[data-initial-zone]").forEach((b) => {
+        b.textContent = labelMap[b.dataset.initialZone];
+        b.disabled = false;
+      });
+      $("select-title").textContent = tr("选择场景", "Choose a scene");
+      $("select-desc").textContent = tr(
+        "选择一个场景后再开始加载",
+        "Choose a scene to begin loading",
+      );
+      $("initial-status").textContent = tr("请选择", "Please select");
+      $("world-menu-toggle").title = tr("选择场景", "Choose scene");
+      $("load-retry").textContent = tr("重试", "Retry");
+      $("load-back").textContent = tr("返回", "Back");
       animate();
-      selectZone("cyber");
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a530c71f195d6129',t:'MTc5MzQyOTk3NA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a530c71f195d6129',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a530ddedac2ae82c',t:'MTc5MzQzMDkwOQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a530ddedac2ae82c',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
