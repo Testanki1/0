@@ -460,8 +460,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+          "three": "https://unpkg.com/three/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three/examples/jsm/",
           "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat/rapier.es.js"
         }
       }
@@ -911,6 +911,9 @@
         checkpoint = 0,
         best = null,
         scoreAnchor = null,
+        // Signed physical progress through 17-node circular routes. This may
+        // be negative while the displayed score remains at zero.
+        cycleProgress = 0,
         jumpWasHeld = false,
         jumpActive = false,
         respawnAnim = null,
@@ -972,9 +975,7 @@
       halloweenFill.visible = false;
       scene.add(halloweenFill);
       const draco = new DRACOLoader();
-      draco.setDecoderPath(
-        "https://www.gstatic.com/draco/versioned/decoders/1.5.5/",
-      );
+      draco.setDecoderPath("https://unpkg.com/three/examples/jsm/libs/draco/");
       const loader = new GLTFLoader();
       loader.setDRACOLoader(draco);
       const textureLoader = new THREE.TextureLoader(),
@@ -1783,15 +1784,14 @@
         playSound("score");
         if (player) {
           const pos = player.rigid.translation(),
-            projected = v(
-              pos.x,
-              pos.y + (zone === "space" ? 0.3 : 3),
-              pos.z,
-            ).project(camera);
+            popupHeight =
+              zone === "space" ? 0.3 : zone === "halloween" ? 0.9 : 3,
+            projected = v(pos.x, pos.y + popupHeight, pos.z).project(camera);
           const el = document.createElement("div");
           el.className = "score-popup";
-          el.textContent = (score > old ? "+" : "") + (score - old);
-          if (score < old) el.style.color = "#ff8080";
+          const amount = score - old;
+          el.textContent = (amount > 0 ? "+" : "") + amount;
+          if (amount < 0) el.style.color = "#ff8080";
           el.style.left = (projected.x * 0.5 + 0.5) * innerWidth + "px";
           el.style.top = (-projected.y * 0.5 + 0.5) * innerHeight + "px";
           document.body.appendChild(el);
@@ -1800,10 +1800,9 @@
         const oldCp = Math.floor(old / 17),
           newCp = Math.floor(score / 17);
         if (newCp > oldCp) {
-          checkpoint = newCp;
+          checkpoint = Math.max(checkpoint, newCp);
           playSound("lap");
-          if (checkpoint < 6)
-            toast(tr(`第 ${checkpoint + 1} 圈`, `LAP ${checkpoint + 1}`));
+          if (newCp < 6) toast(tr(`第 ${newCp + 1} 圈`, `LAP ${newCp + 1}`));
         }
         if (score >= 102) {
           running = false;
@@ -1863,6 +1862,7 @@
           velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
           yaw: player.yaw,
           anchor: scoreAnchor?.clone() || null,
+          cycleProgress,
         };
         player.rigid.setEnabled(false);
         player.mesh.visible = false;
@@ -1967,6 +1967,9 @@
           score = state.score;
           elapsed = state.elapsed;
           checkpoint = state.checkpoint;
+          cycleProgress = Number.isFinite(state.cycleProgress)
+            ? state.cycleProgress
+            : score;
           best = getBest(id);
           if (state.position && !state.finished) {
             player.rigid.setTranslation(state.position, true);
@@ -2088,6 +2091,7 @@
           player.mesh.visible = true;
         }
         if (rollBack) score = Math.min(102, checkpoint * 17);
+        cycleProgress = score;
         const p = spawnForCheckpoint();
         const oldTranslation = player.rigid.translation();
         const cameraTranslation = p
@@ -2112,24 +2116,69 @@
         jumpActive = false;
         updateHUD();
       }
-      // Like the original Snow Trap / Space reworks: return the camera smoothly to
-      // the checkpoint over 1.5 seconds while the reset tank is hidden.
+      // Automatic fall recovery faces the next section of the course. Manual
+      // checkpoint returns keep their existing camera and tank orientation.
+      function checkpointForward() {
+        if (zone === "snow") return v(1, 0, 0);
+        let from, to;
+        if (zone === "space") {
+          const index = checkpoint > 0 ? checkpoint * 17 + 1 : 0;
+          from = spaceTrack.find((n) => n.m === index);
+          to = spaceTrack.find((n) => n.m === index + 1);
+        } else {
+          [from, to] = zones[zone].nodes;
+        }
+        const forward = v(to.x - from.x, 0, to.z - from.z);
+        return forward.lengthSq() > 1e-12 ? forward.normalize() : v(1, 0, 0);
+      }
+      function shortestAngle(delta) {
+        return Math.atan2(Math.sin(delta), Math.cos(delta));
+      }
+      // Keep the 1.5-second recovery animation, turning around the target
+      // at a constant distance and elevation instead of cutting the corner.
       function triggerRespawn() {
         if (!player || respawnAnim) return;
         const fromPos = camera.position.clone(),
-          fromTarget = controls.target.clone();
-        const offset = fromPos.clone().sub(fromTarget);
+          fromTarget = controls.target.clone(),
+          offset = fromPos.clone().sub(fromTarget),
+          forward = checkpointForward(),
+          horizontal = Math.hypot(offset.x, offset.z),
+          fromAngle = Math.atan2(offset.x, offset.z),
+          toAngle = Math.atan2(-forward.x, -forward.z),
+          freeCamera = spectator && zone !== "cyber",
+          fromViewYaw = camera.rotation.y,
+          toViewYaw = Math.atan2(-forward.x, -forward.z);
         respawn(true, true);
+        // Cyber faces local +Z; the other three tanks face local +X.
+        player.yaw =
+          zone === "cyber"
+            ? Math.atan2(forward.x, forward.z)
+            : Math.atan2(-forward.z, forward.x);
+        player.mesh.rotation.y = player.yaw;
+        if (zone === "cyber")
+          player.rigid.setRotation(
+            {
+              x: 0,
+              y: Math.sin(player.yaw / 2),
+              z: 0,
+              w: Math.cos(player.yaw / 2),
+            },
+            true,
+          );
         const spawn = spawnForCheckpoint();
+        // End centered on the tank, so the preserved orbit radius is also
+        // the camera-to-tank distance when recovery finishes.
         const endTarget = spawn.clone();
-        if (zone === "snow") endTarget.y = zones.snow.origin.y + 10;
-        if (zone === "space") endTarget.y -= 5;
-        const endPos = endTarget.clone().add(offset);
         respawnAnim = {
-          fromPos,
           fromTarget,
-          endPos,
           endTarget,
+          horizontal,
+          height: offset.y,
+          fromAngle,
+          angleDelta: shortestAngle(toAngle - fromAngle),
+          freeCamera,
+          fromViewYaw,
+          viewYawDelta: shortestAngle(toViewYaw - fromViewYaw),
           start: performance.now(),
         };
         player.mesh.visible = false;
@@ -2155,7 +2204,7 @@
               : zone === "cyber"
                 ? 1.5
                 : zone === "halloween"
-                  ? 1.1
+                  ? 0.55 // Rounded body bottom is 0.43 below its center.
                   : 0.5;
         return !!world.castRay(
           ray,
@@ -2204,22 +2253,39 @@
           }
           if (min <= 4 && bestN) setScore(Math.max(0, bestN.m - 1));
         } else {
+          // Like Snow Trap, count the landing, not islands passed in midair.
+          // The downward check avoids counting the launch frame as a landing.
+          if (
+            zone === "halloween" &&
+            (!grounded || player.rigid.linvel().y > 0)
+          )
+            return;
           const nodes = zones[zone].nodes;
           const radius = zone === "cyber" ? 13 : 2.5;
           const dy = zone === "cyber" ? 17 : 4;
-          // Check a forward arc of the circular track. A bounded arc avoids
-          // confusing a short backward move with an entire new lap.
-          let advance = 0,
+          // Look in both directions, including the current platform. The
+          // bounded half-ring makes crossing the start unambiguous and allows
+          // jumps of up to eight platforms in either direction.
+          let stepToNearest = 0,
             nearest = Infinity;
-          for (let step = 1; step <= Math.min(8, 102 - score); step++) {
-            const n = nodes[(score + step) % 17];
+          for (let step = -8; step <= 8; step++) {
+            const index = (((cycleProgress + step) % 17) + 17) % 17;
+            const n = nodes[index];
             const d = Math.hypot(p.x - n.x, p.z - n.z);
-            if (d < radius && Math.abs(p.y - n.y) < dy && d < nearest) {
+            if (
+              d < radius &&
+              Math.abs(p.y - n.y) < dy &&
+              (d < nearest ||
+                (d === nearest && Math.abs(step) < Math.abs(stepToNearest)))
+            ) {
               nearest = d;
-              advance = step;
+              stepToNearest = step;
             }
           }
-          if (advance) setScore(score + advance);
+          if (stepToNearest) {
+            cycleProgress += stepToNearest;
+            setScore(cycleProgress);
+          }
         }
       }
       function spaceMotion(dt, p) {
@@ -2434,18 +2500,43 @@
             let t = Math.min(1, (wall - respawnAnim.start) / 1500);
             const ease =
               t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-            camera.position.lerpVectors(
-              respawnAnim.fromPos,
-              respawnAnim.endPos,
-              ease,
-            );
+            const animation = respawnAnim;
             controls.target.lerpVectors(
-              respawnAnim.fromTarget,
-              respawnAnim.endTarget,
+              animation.fromTarget,
+              animation.endTarget,
               ease,
             );
-            if (!spectator || zone === "cyber") controls.update();
+            const angle = animation.fromAngle + animation.angleDelta * ease;
+            camera.position
+              .copy(controls.target)
+              .add(
+                v(
+                  Math.sin(angle) * animation.horizontal,
+                  animation.height,
+                  Math.cos(angle) * animation.horizontal,
+                ),
+              );
+            if (animation.freeCamera) {
+              // Free look can point away from the target; rotate only its yaw.
+              camera.rotation.y =
+                animation.fromViewYaw + animation.viewYawDelta * ease;
+            } else {
+              camera.lookAt(controls.target);
+            }
             if (t >= 1) {
+              if (!animation.freeCamera) {
+                // Consume any residual OrbitControls damping, then restore the
+                // exact endpoint so it cannot alter the preserved elevation.
+                const endPos = camera.position.clone();
+                const endTarget = controls.target.clone();
+                const damping = controls.enableDamping;
+                controls.enableDamping = false;
+                controls.update();
+                controls.target.copy(endTarget);
+                camera.position.copy(endPos);
+                controls.update();
+                controls.enableDamping = damping;
+              }
               player.mesh.visible = true;
               respawnAnim = null;
             }
@@ -2460,6 +2551,8 @@
             grounded = groundCheck();
           if (running) {
             elapsed += actualDelta;
+            // Evaluate a landing before motion can re-launch a held jump.
+            if (zone === "halloween") scoreUpdate(p, grounded);
             if (zone === "space") spaceMotion(dt, p);
             else if (!spectator) groundMotion(dt, p, grounded, now);
             else if (
@@ -2472,7 +2565,7 @@
               renderer.render(scene, camera);
               return;
             }
-            scoreUpdate(p, grounded);
+            if (zone !== "halloween") scoreUpdate(p, grounded);
           }
           player.mesh.position.copy(p);
           if (zone === "snow") player.mesh.position.y -= 1.5;
@@ -3032,5 +3125,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a531acee6e227815',t:'MTc5MzQzOTM4Nw=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a531acee6e227815',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a531de7f4b39609c',t:'MTc5MzQ0MTQxOA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a531de7f4b39609c',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
