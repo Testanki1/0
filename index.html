@@ -1123,7 +1123,9 @@
       const loadEXR = (url) => loadObjectURL(exrLoader, url);
       const soundPaths = {
         cyber: {
+          // The checked-in music is byte-identical to the official main.opus.
           music: "assets/cybertank/bounce tanki loop cut (no intro).opus",
+          score: "assets/cybertank/move.mp3",
         },
         snow: {
           music: "assets/tanki-and-the-snow-trap/main.mp3",
@@ -1137,25 +1139,53 @@
         },
         halloween: {
           music: "assets/trick-or-treat/thm_3.mp3",
+          ambient: "assets/trick-or-treat/tree2.mp3",
           score: "assets/trick-or-treat/move.mp3",
         },
       };
-      let music = new Audio();
+      let music = new Audio(),
+        ambientAudio = null;
+      const activeEffects = new Set();
       music.loop = true;
       music.volume = 0.4;
-      function switchMusic() {
+      function pauseThemeAudio(stopEffects = true) {
         music.pause();
-        music = new Audio(soundPaths[zone].music);
+        if (ambientAudio) ambientAudio.pause();
+        if (stopEffects) {
+          for (const effect of activeEffects) effect.pause();
+          activeEffects.clear();
+        }
+      }
+      function playThemeAudio() {
+        if (!soundEnabled || !running || document.hidden) return;
+        music.play().catch(() => {});
+        if (ambientAudio) ambientAudio.play().catch(() => {});
+      }
+      function switchMusic() {
+        pauseThemeAudio();
+        const paths = soundPaths[zone];
+        music = new Audio(paths.music);
         music.loop = true;
         music.volume = 0.4;
-        if (soundEnabled && running) music.play().catch(() => {});
+        ambientAudio = paths.ambient ? new Audio(paths.ambient) : null;
+        if (ambientAudio) {
+          ambientAudio.loop = true;
+          // Preserve the official 2:1 music-to-ambient ratio at the existing
+          // game music volume.
+          ambientAudio.volume = 0.2;
+        }
+        playThemeAudio();
       }
       function playSound(key) {
         const path = soundPaths[zone][key];
         if (!soundEnabled || !path) return;
-        const a = new Audio(path);
-        a.volume = 0.65;
-        a.play().catch(() => {});
+        const effect = new Audio(path);
+        effect.volume = 0.65;
+        activeEffects.add(effect);
+        effect.addEventListener("ended", () => activeEffects.delete(effect), {
+          once: true,
+        });
+        effect.play().catch(() => activeEffects.delete(effect));
       }
       function toast(txt) {
         $("toast").textContent = txt;
@@ -1285,16 +1315,21 @@
         const rigid = world.createRigidBody(descriptor);
         world.createCollider(shape, rigid);
         rigid.setEnabled(false);
-        zones[id].player = { mesh, rigid, spawn: spawn.clone(), yaw: 0 };
+        zones[id].player = { mesh, rigid, spawn: spawn.clone(), yaw: 0, pitch: 0 };
         return zones[id].player;
       }
       async function loadCyber() {
         const z = zones.cyber,
           [field, tank, env] = await Promise.all([
-            loadGLB("https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Scene.glb"),
-            loadGLB("https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Tank.glb"),
+            loadGLB(
+              cdn + "summer-game/dcrbtjllknft/models/Minigame_Synth_Scene.glb",
+            ),
+            loadGLB(
+              cdn + "summer-game/dcrbtjllknft/models/Minigame_Synth_Tank.glb",
+            ),
             loadEXR(
-              "https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Environment_4096x2048.exr",
+              cdn +
+                "summer-game/dcrbtjllknft/models/Minigame_Synth_Environment_4096x2048.exr",
             ),
           ]);
         env.mapping = THREE.EquirectangularReflectionMapping;
@@ -1842,7 +1877,8 @@
         }
         if (score >= 102) {
           running = false;
-          music.pause();
+          // Leave the final score cue audible while stopping background loops.
+          pauseThemeAudio(false);
           const newRecord = best === null || elapsed < best;
           if (newRecord) {
             best = elapsed;
@@ -1897,6 +1933,7 @@
           position: { x: position.x, y: position.y, z: position.z },
           velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
           yaw: player.yaw,
+          pitch: player.pitch,
           anchor: scoreAnchor?.clone() || null,
           cycleProgress,
         };
@@ -1920,7 +1957,7 @@
         resetTouchControls();
         loading = true;
         running = false;
-        music.pause();
+        pauseThemeAudio();
         if (respawnAnim) {
           respawnAnim = null;
           if (player) player.mesh.visible = true;
@@ -2011,6 +2048,7 @@
             player.rigid.setTranslation(state.position, true);
             player.rigid.setLinvel(state.velocity, true);
             player.yaw = state.yaw;
+            player.pitch = Number.isFinite(state.pitch) ? state.pitch : 0;
             scoreAnchor = state.anchor?.clone() || null;
             cameraPrevAngle = Math.atan2(
               state.position.x - zones[id].origin.x,
@@ -2026,7 +2064,7 @@
           player.mesh.position.copy(cameraStart);
           if (id === "snow") player.mesh.position.y -= 1.5;
           if (id === "space") player.mesh.position.y -= 0.15;
-          player.mesh.rotation.y = player.yaw;
+          syncPlayerVisualRotation();
           controls.target.copy(cameraStart);
           // Place the camera behind the tank's forward axis. Yaw is restored
           // per scene, so revisiting a turned tank also starts behind it.
@@ -2076,7 +2114,7 @@
           lastFrame = performance.now();
           clock.getDelta();
           running = continueDirectly;
-          if (soundEnabled && running) music.play().catch(() => {});
+          playThemeAudio();
           $("loading").classList.add("hidden");
           if (!continueDirectly) $("welcome").classList.remove("hidden");
           updateHUD();
@@ -2101,7 +2139,7 @@
               lastFrame = performance.now();
               clock.getDelta();
               running = wasRunning;
-              if (soundEnabled && running) music.play().catch(() => {});
+              playThemeAudio();
             } else $("initial-select").classList.remove("hidden");
             loading = false;
           };
@@ -2170,6 +2208,13 @@
       function shortestAngle(delta) {
         return Math.atan2(Math.sin(delta), Math.cos(delta));
       }
+      // The space tank faces local +X. Rotate about its own Z axis after yaw
+      // so that pitch follows its nose without introducing any roll.
+      function syncPlayerVisualRotation() {
+        if (zone === "space")
+          player.mesh.rotation.set(0, player.yaw, player.pitch || 0, "YZX");
+        else player.mesh.rotation.y = player.yaw;
+      }
       // Keep the 1.5-second recovery animation, turning around the target
       // at a constant distance and elevation instead of cutting the corner.
       function triggerRespawn() {
@@ -2190,7 +2235,8 @@
           zone === "cyber"
             ? Math.atan2(forward.x, forward.z)
             : Math.atan2(-forward.z, forward.x);
-        player.mesh.rotation.y = player.yaw;
+        if (zone === "space") player.pitch = 0;
+        syncPlayerVisualRotation();
         if (zone === "cyber")
           player.rigid.setRotation(
             {
@@ -2371,6 +2417,16 @@
               .applyAxisAngle(v(0, 1, 0), player.yaw)
               .multiplyScalar(keyboard.f * 5);
           }
+        }
+        // Looking alone must not rotate the tank. Only active driving or
+        // the space thrust control turns the nose toward the view elevation.
+        if (!spectator && (moving || jumpHeld())) {
+          const view = v();
+          camera.getWorldDirection(view);
+          const targetPitch = Math.atan2(view.y, Math.hypot(view.x, view.z));
+          const pitchStep = 2 * dt;
+          const difference = targetPitch - player.pitch;
+          player.pitch += Math.max(-pitchStep, Math.min(pitchStep, difference));
         }
         let vel = player.rigid.linvel(),
           vx = vel.x,
@@ -2606,7 +2662,7 @@
           player.mesh.position.copy(p);
           if (zone === "snow") player.mesh.position.y -= 1.5;
           if (zone === "space") player.mesh.position.y -= 0.15;
-          player.mesh.rotation.y = player.yaw;
+          syncPlayerVisualRotation();
           if (zone === "cyber")
             player.rigid.setRotation(
               {
@@ -2659,7 +2715,7 @@
         }
         running = true;
         $("welcome").classList.add("hidden");
-        if (soundEnabled) music.play().catch(() => {});
+        playThemeAudio();
         updateHUD();
       };
       $("replay").onclick = resetRace;
@@ -2695,8 +2751,8 @@
         });
       $("sound").onclick = () => {
         soundEnabled = !soundEnabled;
-        if (soundEnabled && running) music.play().catch(() => {});
-        else music.pause();
+        if (soundEnabled) playThemeAudio();
+        else pauseThemeAudio();
         updateHUD();
       };
       $("camera").onclick = () => {
@@ -3075,7 +3131,11 @@
         recentTouchClicks.length = 0;
       }
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) return;
+        if (!document.hidden) {
+          playThemeAudio();
+          return;
+        }
+        pauseThemeAudio();
         keyboard.f = keyboard.t = 0;
         keyboard.jump = false;
         resetTouchControls();
@@ -3248,5 +3308,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a532c1094a643828',t:'MTc5MzQ1MDY5Nw=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a532c1094a643828',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5333b45cd49d380',t:'MTc5MzQ1NTcwMw=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5333b45cd49d380',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
