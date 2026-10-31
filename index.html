@@ -984,6 +984,149 @@
           controls._onPointerUp,
         );
       }
+      // Space uses a continuous orbit: unlike OrbitControls' spherical polar
+      // angle, this polar angle may pass either pole and continue indefinitely.
+      let spaceOrbit = null,
+        spacePinchDistance = null;
+      const spacePointers = new Map();
+      const orbitWorldUp = v(0, 1, 0);
+      function clearSpacePointers() {
+        const ids = [...spacePointers.keys()];
+        spacePointers.clear();
+        spacePinchDistance = null;
+        for (const id of ids) {
+          try {
+            if (renderer.domElement.hasPointerCapture(id))
+              renderer.domElement.releasePointerCapture(id);
+          } catch {}
+        }
+      }
+      function applySpaceOrbit() {
+        if (!spaceOrbit) return;
+        const { azimuth, polar, radius } = spaceOrbit,
+          sp = Math.sin(polar),
+          cp = Math.cos(polar),
+          sa = Math.sin(azimuth),
+          ca = Math.cos(azimuth);
+        camera.position
+          .copy(controls.target)
+          .add(v(radius * sp * sa, radius * cp, radius * sp * ca));
+        // The camera's up vector follows the orbit continuously through the
+        // poles, avoiding the sudden 180-degree flip of a fixed world-up.
+        camera.up.set(-cp * sa, sp, -cp * ca).normalize();
+        camera.lookAt(controls.target);
+        camera.updateMatrixWorld();
+      }
+      function initializeSpaceOrbit() {
+        const offset = camera.position.clone().sub(controls.target),
+          distance = offset.length(),
+          radius = THREE.MathUtils.clamp(
+            distance || 1,
+            controls.minDistance,
+            controls.maxDistance,
+          ),
+          actualUp = v(0, 1, 0).applyQuaternion(camera.quaternion);
+        let azimuth = Math.atan2(offset.x, offset.z),
+          polar = Math.acos(
+            THREE.MathUtils.clamp(offset.y / (distance || 1), -1, 1),
+          );
+        // The same position has an inverted representation on the far side
+        // of a pole; retain the current screen orientation when possible.
+        if (actualUp.y < -1e-6) {
+          polar = -polar;
+          azimuth += Math.PI;
+        }
+        spaceOrbit = { azimuth, polar, radius };
+        applySpaceOrbit();
+      }
+      const spaceOrbitActive = () =>
+        zone === "space" &&
+        !spectator &&
+        !loading &&
+        !respawnAnim &&
+        !!spaceOrbit;
+      function spacePinch() {
+        const points = [...spacePointers.values()];
+        return points.length === 2
+          ? Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y)
+          : null;
+      }
+      renderer.domElement.addEventListener("pointerdown", (event) => {
+        if (
+          !spaceOrbitActive() ||
+          (event.pointerType === "mouse" &&
+            event.button !== 0 &&
+            event.button !== 1)
+        )
+          return;
+        spacePointers.set(event.pointerId, {
+          x: event.clientX,
+          y: event.clientY,
+          button: event.button,
+        });
+        try {
+          renderer.domElement.setPointerCapture(event.pointerId);
+        } catch {}
+        spacePinchDistance = spacePinch();
+      });
+      renderer.domElement.addEventListener("pointermove", (event) => {
+        if (!spaceOrbitActive()) return;
+        const point = spacePointers.get(event.pointerId);
+        if (!point) return;
+        const dx = event.clientX - point.x,
+          dy = event.clientY - point.y;
+        point.x = event.clientX;
+        point.y = event.clientY;
+        if (spacePointers.size === 1) {
+          if (point.button === 1 && event.pointerType === "mouse") {
+            spaceOrbit.radius = THREE.MathUtils.clamp(
+              spaceOrbit.radius * Math.exp(dy * 0.01),
+              controls.minDistance,
+              controls.maxDistance,
+            );
+          } else {
+            const scale =
+              (2 * Math.PI) / Math.max(1, renderer.domElement.clientHeight);
+            spaceOrbit.azimuth -= dx * scale;
+            spaceOrbit.polar -= dy * scale;
+          }
+        } else if (spacePointers.size === 2) {
+          const distance = spacePinch();
+          if (spacePinchDistance && distance > 0)
+            spaceOrbit.radius = THREE.MathUtils.clamp(
+              (spaceOrbit.radius * spacePinchDistance) / distance,
+              controls.minDistance,
+              controls.maxDistance,
+            );
+          spacePinchDistance = distance;
+        }
+        applySpaceOrbit();
+        if (event.cancelable) event.preventDefault();
+      });
+      function endSpacePointer(event) {
+        if (spacePointers.delete(event.pointerId))
+          spacePinchDistance = spacePinch();
+      }
+      renderer.domElement.addEventListener("pointerup", endSpacePointer);
+      renderer.domElement.addEventListener("pointercancel", endSpacePointer);
+      renderer.domElement.addEventListener(
+        "lostpointercapture",
+        endSpacePointer,
+      );
+      renderer.domElement.addEventListener(
+        "wheel",
+        (event) => {
+          if (!spaceOrbitActive()) return;
+          event.preventDefault();
+          spaceOrbit.radius = THREE.MathUtils.clamp(
+            spaceOrbit.radius * Math.exp(event.deltaY * 0.001),
+            controls.minDistance,
+            controls.maxDistance,
+          );
+          applySpaceOrbit();
+        },
+        { passive: false },
+      );
       let manualOrbitActive = false,
         manualOrbitEnd = -Infinity;
       controls.addEventListener("start", () => {
@@ -1022,7 +1165,10 @@
       // camera-to-tank angle as the reference for space flight pitch.
       const spaceCameraHorizontal = Math.hypot(1, 2),
         spaceCameraHeight = 1.2,
-        spaceNeutralViewPitch = Math.atan2(-spaceCameraHeight, spaceCameraHorizontal);
+        spaceNeutralViewPitch = Math.atan2(
+          -spaceCameraHeight,
+          spaceCameraHorizontal,
+        );
       let activeTracker = null;
       function createTracker() {
         const tracker = { items: [], lastUpdate: 0 };
@@ -1320,7 +1466,13 @@
         const rigid = world.createRigidBody(descriptor);
         world.createCollider(shape, rigid);
         rigid.setEnabled(false);
-        zones[id].player = { mesh, rigid, spawn: spawn.clone(), yaw: 0, pitch: 0 };
+        zones[id].player = {
+          mesh,
+          rigid,
+          spawn: spawn.clone(),
+          yaw: 0,
+          pitch: 0,
+        };
         return zones[id].player;
       }
       async function loadCyber() {
@@ -1960,6 +2112,7 @@
         const hadPlayer = !!player,
           wasRunning = running;
         resetTouchControls();
+        clearSpacePointers();
         loading = true;
         running = false;
         pauseThemeAudio();
@@ -2004,7 +2157,8 @@
           document.documentElement.dataset.zone = id;
           freePointers.clear();
           freeGesture = null;
-          controls.enabled = !(id !== "cyber" && spectator);
+          camera.up.set(0, 1, 0);
+          controls.enabled = id !== "space" && !(id !== "cyber" && spectator);
           controls.enablePan = id === "cyber" && spectator;
           $("touch-ui").classList.toggle(
             "spectator-hidden",
@@ -2090,6 +2244,9 @@
           if (id !== "cyber" && spectator) {
             camera.lookAt(cameraStart);
             camera.rotation.reorder("YXZ");
+          } else if (id === "space") {
+            camera.lookAt(controls.target);
+            initializeSpaceOrbit();
           } else controls.update();
           light.color.setHex(id === "halloween" ? 0xffffff : 0xffdfb0);
           light.intensity = id === "halloween" ? 1 : 1.5;
@@ -2188,7 +2345,8 @@
         if (!silent) {
           camera.position.add(cameraTranslation);
           controls.target.add(cameraTranslation);
-          if (!spectator || zone === "cyber") controls.update();
+          if ((!spectator || zone === "cyber") && zone !== "space")
+            controls.update();
         }
         lastGrounded = -1e4;
         jumpWasHeld = false;
@@ -2224,6 +2382,7 @@
       // at a constant distance and elevation instead of cutting the corner.
       function triggerRespawn() {
         if (!player || respawnAnim) return;
+        clearSpacePointers();
         const fromPos = camera.position.clone(),
           fromTarget = controls.target.clone(),
           offset = fromPos.clone().sub(fromTarget),
@@ -2266,6 +2425,14 @@
           freeCamera,
           fromViewYaw,
           viewYawDelta: shortestAngle(toViewYaw - fromViewYaw),
+          spaceStartAzimuth:
+            zone === "space" && !freeCamera && spaceOrbit
+              ? spaceOrbit.azimuth
+              : null,
+          spaceStartUp:
+            zone === "space" && !freeCamera && spaceOrbit
+              ? camera.up.clone()
+              : null,
           start: performance.now(),
         };
         player.mesh.visible = false;
@@ -2436,7 +2603,9 @@
         if (!spectator && (moving || thrusting)) {
           const view = v();
           camera.getWorldDirection(view);
-          const cameraPitch = Math.atan2(view.y, Math.hypot(view.x, view.z));
+          const cameraPitch = spaceOrbit
+            ? spaceOrbit.polar - Math.PI / 2
+            : Math.atan2(view.y, Math.hypot(view.x, view.z));
           const viewChange = cameraPitch - spaceNeutralViewPitch;
           // Preserve the initial camera-to-tank angle, rather than aiming the
           // nose directly along the camera. Thrust always pushes forward.
@@ -2450,7 +2619,9 @@
           // actual smoothed pitch for the vertical part of the movement.
           target.multiplyScalar(Math.cos(player.pitch));
           target.y =
-            Math.sin(player.pitch) * 5 * (joystickMove ? 1 : Math.sign(keyboard.f));
+            Math.sin(player.pitch) *
+            5 *
+            (joystickMove ? 1 : Math.sign(keyboard.f));
         }
         let vel = player.rigid.linvel(),
           vx = vel.x,
@@ -2642,10 +2813,22 @@
               camera.rotation.y =
                 animation.fromViewYaw + animation.viewYawDelta * ease;
             } else {
+              if (animation.spaceStartUp)
+                camera.up
+                  .copy(animation.spaceStartUp)
+                  .applyAxisAngle(orbitWorldUp, animation.angleDelta * ease);
               camera.lookAt(controls.target);
             }
             if (t >= 1) {
-              if (!animation.freeCamera) {
+              if (
+                !animation.freeCamera &&
+                animation.spaceStartAzimuth !== null &&
+                spaceOrbit
+              ) {
+                spaceOrbit.azimuth =
+                  animation.spaceStartAzimuth + animation.angleDelta;
+                applySpaceOrbit();
+              } else if (!animation.freeCamera) {
                 // Consume any residual OrbitControls damping, then restore the
                 // exact endpoint so it cannot alter the preserved elevation.
                 const endPos = camera.position.clone();
@@ -2732,7 +2915,8 @@
             );
             camera.position.copy(controls.target).add(offset);
           }
-          if (!spectator || zone === "cyber") controls.update();
+          if ((!spectator || zone === "cyber") && zone !== "space")
+            controls.update();
           updateHUD();
         }
         renderer.render(scene, camera);
@@ -2828,10 +3012,12 @@
             camera.translateY(dy * 0.05 * freeScale());
           } else {
             camera.rotation.y -= dx * 0.004;
-            camera.rotation.x = Math.max(
-              -Math.PI / 2,
-              Math.min(Math.PI / 2, camera.rotation.x - dy * 0.004),
-            );
+            if (zone === "space") camera.rotation.x -= dy * 0.004;
+            else
+              camera.rotation.x = Math.max(
+                -Math.PI / 2,
+                Math.min(Math.PI / 2, camera.rotation.x - dy * 0.004),
+              );
           }
         } else if (freePointers.size === 2) {
           const now = freeTwoFinger();
@@ -2864,6 +3050,7 @@
       });
       $("spectator-toggle").onclick = () => {
         spectator = !spectator;
+        clearSpacePointers();
         freePointers.clear();
         freeGesture = null;
         if (zone === "cyber") {
@@ -2876,7 +3063,7 @@
           keyboard.jump = false;
           resetTouchControls();
           $("touch-ui").classList.toggle("spectator-hidden", spectator);
-          controls.enabled = !spectator;
+          controls.enabled = !spectator && zone !== "space";
           controls.enablePan = false;
           if (spectator) camera.rotation.reorder("YXZ");
           else {
@@ -2886,7 +3073,8 @@
               pos.z - zones[zone].origin.z,
             );
             controls.target.set(pos.x, pos.y, pos.z);
-            controls.update();
+            if (zone === "space") initializeSpaceOrbit();
+            else controls.update();
           }
         }
         updateHUD();
@@ -3096,6 +3284,7 @@
             jumpButton.releasePointerCapture(id);
       }
       window.addEventListener("blur", () => {
+        clearSpacePointers();
         keyboard.f = keyboard.t = 0;
         keyboard.jump = false;
         resetTouchControls();
@@ -3165,6 +3354,7 @@
           return;
         }
         pauseThemeAudio();
+        clearSpacePointers();
         keyboard.f = keyboard.t = 0;
         keyboard.jump = false;
         resetTouchControls();
@@ -3337,5 +3527,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5335b334d87718b',t:'MTc5MzQ1NzAxMQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5335b334d87718b',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a53372abfa55718b',t:'MTc5MzQ1Nzk3Mw=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a53372abfa55718b',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
