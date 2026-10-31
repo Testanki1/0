@@ -253,9 +253,9 @@
             try {
                 // 并行加载所有资源
                 const [texture, sceneGltf, tankGltf] = await Promise.all([
-                    loadWithProgress(exrLoader, 'assets/Minigame_Synth_Environment_4096x2048.exr', assets.envMap),
-                    loadWithProgress(gltfLoader, 'assets/Minigame_Synth_Scene.glb', assets.scene),
-                    loadWithProgress(gltfLoader, 'assets/Minigame_Synth_Tank.glb', assets.tank)
+                    loadWithProgress(exrLoader, 'https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Environment_4096x2048.exr', assets.envMap),
+                    loadWithProgress(gltfLoader, 'https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Scene.glb', assets.scene),
+                    loadWithProgress(gltfLoader, 'https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Tank.glb', assets.tank)
                 ]);
 
                 // --- 所有资源加载完成，开始处理它们 ---
@@ -550,7 +550,7 @@
             const iconOn = document.getElementById('music-icon-on'); 
             const iconOff = document.getElementById('music-icon-off'); 
             try { 
-                const response = await fetch('assets/bounce tanki loop cut (no intro).opus'); 
+                const response = await fetch('../assets/cybertank/bounce tanki loop cut (no intro).opus'); 
                 const arrayBuffer = await response.arrayBuffer(); 
                 audioContext = THREE.AudioContext.getContext(); 
                 audioBuffer = await audioContext.decodeAudioData(arrayBuffer); 

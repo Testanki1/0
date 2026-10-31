@@ -1123,21 +1123,21 @@
       const loadEXR = (url) => loadObjectURL(exrLoader, url);
       const soundPaths = {
         cyber: {
-          music: "cybertank/assets/bounce tanki loop cut (no intro).opus",
+          music: "assets/cybertank/bounce tanki loop cut (no intro).opus",
         },
         snow: {
-          music: "tanki-and-the-snow-trap/static/media/main.a5574efb.mp3",
-          score: "tanki-and-the-snow-trap/static/media/move.046bd221.mp3",
-          lap: "tanki-and-the-snow-trap/static/media/checkpoint.d152b838.mp3",
-          jump: "tanki-and-the-snow-trap/static/media/roll.0da23fa7.mp3",
+          music: "assets/tanki-and-the-snow-trap/main.mp3",
+          score: "assets/tanki-and-the-snow-trap/move.mp3",
+          lap: "assets/tanki-and-the-snow-trap/checkpoint.mp3",
+          jump: "assets/tanki-and-the-snow-trap/roll.mp3",
         },
         space: {
           music: cdn + "darkmatter/main.mp3",
-          score: "tanks-in-space/static/media/move.fcdf39d2.mp3",
+          score: "assets/tanks-in-space/move.mp3",
         },
         halloween: {
-          music: "https://pages.tankionline.com/audio/halloween/thm_3.mp3",
-          score: "https://pages.tankionline.com/audio/halloween/move.mp3",
+          music: "assets/trick-or-treat/thm_3.mp3",
+          score: "assets/trick-or-treat/move.mp3",
         },
       };
       let music = new Audio();
@@ -1291,10 +1291,10 @@
       async function loadCyber() {
         const z = zones.cyber,
           [field, tank, env] = await Promise.all([
-            loadGLB("cybertank/assets/Minigame_Synth_Scene.glb"),
-            loadGLB("cybertank/assets/Minigame_Synth_Tank.glb"),
+            loadGLB("https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Scene.glb"),
+            loadGLB("https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Tank.glb"),
             loadEXR(
-              "cybertank/assets/Minigame_Synth_Environment_4096x2048.exr",
+              "https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/Minigame_Synth_Environment_4096x2048.exr",
             ),
           ]);
         env.mapping = THREE.EquirectangularReflectionMapping;
@@ -1404,8 +1404,8 @@
             ...names.map((n) => loadGLB(base + n + "-transformed.glb")),
             loadGLB(cdn + "darkmatter/asteroids/asteroid1.glb"),
             loadGLB(cdn + "darkmatter/asteroids/asteroid2.glb"),
-            loadGLB("tanks-in-space/spiral6.glb"),
-            loadTexture("tanks-in-space/beam_noise.png"),
+            loadGLB("assets/tanks-in-space/spiral6.glb"),
+            loadTexture("assets/tanks-in-space/beam_noise.png"),
             loadTexture(cdn + "darkmatter/sky2.webp"),
             loadHDR(cdn + "darkmatter/venice_sunset_1k.hdr"),
           ]);
