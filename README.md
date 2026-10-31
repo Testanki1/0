@@ -1,4 +1,4 @@
-# 0 · Tanki Jump（3D 坦克迷你游戏 · 平台跳跃重构）
+# Tanki Jump（3D 坦克迷你游戏 · 平台跳跃重构）
 
 > [中文版](#中文版) · [English version](#english-version) · [引用来源](#引用来源--sources)
 
@@ -35,9 +35,9 @@
 
 **一句话概括关系**：官方原站是“**限时活动进度网页**”（登录 → 花活动货币 → 走格子/跳平台 → 领游戏内奖励）；本项目是“**把官方活动场景搬出来做成一个 3D 跳跃小游戏**”（无需登录 → 没有货币 → 靠操作打分 → 只有本地记录）。场景与官方站的对应关系，是通过比对页面资源文件名逐一确认的。
 
-## 逐项对比：`/0/` vs 官方迷你游戏原站
+## 逐项对比：本项目 vs 官方迷你游戏原站
 
-| 维度 | 官方活动站（halloween / new-year / darkmatter / summer-game） | 本项目 `/0/` | 评价 |
+| 维度 | 官方活动站（halloween / new-year / darkmatter / summer-game） | 本项目 | 评价 |
 | --- | --- | --- | --- |
 | 入口 | 每年活动期开放（通常 27 天左右），由官网新闻页跳转；过期后部分会显示“网站暂不可用” | 永久在线，GitHub Pages 静态托管 | 生命周期不同，本项目不受活动期限制 |
 | 登录 | **必须**用游戏昵称 + 密码登录活动网站（社交账号登录者需联系客服取密码） | 无登录、无后端、无任何账号数据 | 本项目不接触玩家凭据 |
@@ -50,7 +50,6 @@
 | 音频 | 官方原创 BGM 与音效 | 仓库内另存官方音频并播放 | 同源 |
 | 多语言 | `?lang=en` 等参数切换，官方维护多语种 | 依 `navigator.language` 在中文/英文间切换 | 本项目只有中英两种，本地自行维护 |
 | 多端 | 早年限 PC，近两年起支持手机浏览器 | 同时支持桌面与移动（虚拟摇杆） | 相当 |
-| 官方标识 | 官方 Logo、官方域名、备案信息 | 无 Logo；标题含 “Tanki” 字样 | ⚠️ 建议标题加 `(Unofficial)` |
 
 ### 结论
 
@@ -91,9 +90,9 @@ Each scene is taken from a separate official event website. These sites are re-r
 
 **In short**: the official sites are limited-time event pages. You log in, spend event currency, move between platforms or islands, and collect in-game rewards. This project takes those scenes and turns them into a real-time 3D parkour game: no login, no currency, skill-based scoring, a local best time and nothing else. The scene-to-site mapping was confirmed by comparing resource filenames on each official page.
 
-## Side by side: `/0/` vs the official mini-game sites
+## Side by side: this project vs the official mini-game sites
 
-| Aspect | Official event site (halloween / new-year / darkmatter / summer-game) | `/0/` | Notes |
+| Aspect | Official event site (halloween / new-year / darkmatter / summer-game) | This project | Notes |
 | --- | --- | --- | --- |
 | Availability | Live for about 27 days per event and linked from the news post; some go offline afterwards | Always online, static hosting on GitHub Pages | Different lifespan |
 | Login | Required: in-game nickname and password. Players who sign in through social accounts have to ask support for a password | None — no backend, no account data | This project never touches player credentials |
@@ -106,7 +105,6 @@ Each scene is taken from a separate official event website. These sites are re-r
 | Audio | Official soundtrack and sound effects | Official audio re-hosted in this repository and played in the page | Same sources |
 | Languages | Switched with `?lang=en` and similar parameters, maintained officially | Switches between Chinese and English based on `navigator.language` | Two languages, maintained here |
 | Platforms | PC only in the early years; mobile browsers supported more recently | Desktop and mobile, with a virtual joystick | Comparable |
-| Official branding | Official logo, official domain, ICP filing | No logo; the title contains the word "Tanki" | ⚠️ Consider adding `(Unofficial)` to the title |
 
 ### Summary
 
@@ -118,17 +116,14 @@ Each scene is taken from a separate official event website. These sites are re-r
 
 ## 引用来源 / Sources
 
-| 文档 | 链接 | 取用日期 |
-| --- | --- | --- |
-| Cybertank 2026 官方公告（活动站入口） | <https://tankionline.com/en/2026/07/cybertank-2026-mini-game/> | 2026-11-01 |
-| Cybertank 官方活动站（国际服 / 国服） | <https://pages.tankionline.com/summer-game/> · <https://pages.3dtank.com/summer-game/> | 2026-11-01 |
-| Tanki and The Snow Trap 官方活动站 | <https://new-year.tankionline.com/> | 2026-11-01 |
-| Tanks in Space 2026 官方公告（活动站入口） | <https://tankionline.com/en/2026/04/tanks-in-space-mini-game-2026/> | 2026-11-01 |
-| Tanks in Space 官方活动站 | <https://darkmatter.tankionline.com/> | 2026-11-01 |
-| Trick-or-Treat 2026 官方公告（活动站入口） | <https://tankionline.com/en/2026/10/trick-or-treat-mini-game-2026/> | 2026-11-01 |
-| Trick-or-Treat 官方活动站（国际服 / 国服） | <https://pages.tankionline.com/halloween> · <https://pages.3dtank.com/halloween> | 2026-11-01 |
-| Fan Content Guidelines（EN，声明出处） | <https://en.tankiwiki.com/Creating_Fan_Content_Guide> | 2026-11-01 |
-| 粉丝内容创作指南（中文，声明出处） | <https://wiki.3dtank.net/粉丝内容创作指南> | 2026-11-01 |
+| 文档 | 链接 |
+| --- | --- |
+| Cybertank 官方活动站（国际服 / 国服） | <https://pages.tankionline.com/summer-game/> · <https://pages.3dtank.com/summer-game/> |
+| Tanki and The Snow Trap 官方活动站 | <https://new-year.tankionline.com/> |
+| Tanks in Space 官方活动站 | <https://darkmatter.tankionline.com/> |
+| Trick-or-Treat 官方活动站（国际服 / 国服） | <https://pages.tankionline.com/halloween> · <https://pages.3dtank.com/halloween> |
+| Fan Content Guidelines（EN，声明出处） | <https://en.tankiwiki.com/Creating_Fan_Content_Guide> |
+| 粉丝内容创作指南（中文，声明出处） | <https://wiki.3dtank.net/粉丝内容创作指南> |
 
 说明：
 
