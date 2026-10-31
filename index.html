@@ -883,9 +883,6 @@
         jumpWasHeld = false,
         jumpActive = false,
         respawnAnim = null,
-        physicsAccumulator = 0,
-        previousPhysicsPosition = null,
-        previousPhysicsYaw = 0,
         lastGrounded = -1e4,
         cameraPrevAngle = 0,
         spaceTrack = [],
@@ -1695,7 +1692,6 @@
         loading = true;
         running = false;
         music.pause();
-        physicsAccumulator = 0;
         if (respawnAnim) {
           respawnAnim = null;
           if (player) player.mesh.visible = true;
@@ -1742,7 +1738,6 @@
               b.classList.toggle("active", b.dataset.zone === id),
             );
           player = zones[id].player;
-          previousPhysicsPosition = null;
           restoreGraphics(zones[id]);
           player.mesh.visible = true;
           player.rigid.setEnabled(true);
@@ -1782,8 +1777,6 @@
             currentPosition.y,
             currentPosition.z,
           );
-          previousPhysicsPosition = cameraStart.clone();
-          previousPhysicsYaw = player.yaw;
           player.mesh.position.copy(cameraStart);
           if (id === "snow") player.mesh.position.y -= 1.5;
           if (id === "space") player.mesh.position.y -= 0.15;
@@ -1811,7 +1804,6 @@
           await new Promise((resolve) => requestAnimationFrame(resolve));
           lastFrame = performance.now();
           clock.getDelta();
-          physicsAccumulator = 0;
           running = continueDirectly;
           if (soundEnabled && running) music.play().catch(() => {});
           $("loading").classList.add("hidden");
@@ -1837,7 +1829,6 @@
             if (hadPlayer) {
               lastFrame = performance.now();
               clock.getDelta();
-              physicsAccumulator = 0;
               running = wasRunning;
               if (soundEnabled && running) music.play().catch(() => {});
             } else $("initial-select").classList.remove("hidden");
@@ -1867,9 +1858,6 @@
         if (rollBack) score = Math.min(102, checkpoint * 17);
         const p = spawnForCheckpoint();
         player.rigid.setTranslation(p, true);
-        previousPhysicsPosition = p.clone();
-        previousPhysicsYaw = player.yaw;
-        physicsAccumulator = 0;
         player.rigid.setLinvel({ x: 0, y: 0, z: 0 }, true);
         player.rigid.setAngvel({ x: 0, y: 0, z: 0 }, true);
         player.mesh.position.copy(p);
@@ -2178,7 +2166,7 @@
         const wall = performance.now(),
           actualDelta = Math.max(0, (wall - lastFrame) / 1000);
         lastFrame = wall;
-        const dt = Math.min(clock.getDelta(), 0.25),
+        const dt = Math.min(clock.getDelta(), 0.05),
           now = clock.elapsedTime;
         if (beamTexture && zone === "space") beamTexture.offset.y += 0.5 * dt;
         if (zone === "halloween" && zones.halloween.mixer)
@@ -2215,61 +2203,36 @@
             renderer.render(scene, camera);
             return;
           }
-          // Fixed 60 Hz simulation with catch-up steps prevents weak-looking
-          // gravity and floaty controls when rendering drops below 20 FPS.
+          world.timestep = dt || 1 / 60;
+          if (running) world.step();
+          let position = player.rigid.translation(),
+            p = v(position.x, position.y, position.z),
+            grounded = groundCheck();
           if (running) {
             elapsed += actualDelta;
-            physicsAccumulator += dt;
-            const fixedStep = 1 / 60;
-            while (physicsAccumulator >= fixedStep && running && !respawnAnim) {
-              const before = player.rigid.translation();
-              previousPhysicsPosition = v(before.x, before.y, before.z);
-              previousPhysicsYaw = player.yaw;
-              world.timestep = fixedStep;
-              world.step();
-              const t = player.rigid.translation();
-              const stepPos = v(t.x, t.y, t.z);
-              const grounded = groundCheck();
-              if (zone === "space") spaceMotion(fixedStep, stepPos);
-              else if (!(zone === "cyber" && spectator))
-                groundMotion(fixedStep, stepPos, grounded, now);
-              if (zone === "cyber")
-                player.rigid.setRotation(
-                  {
-                    x: 0,
-                    y: Math.sin(player.yaw / 2),
-                    z: 0,
-                    w: Math.cos(player.yaw / 2),
-                  },
-                  true,
-                );
-              if (!respawnAnim) scoreUpdate(stepPos, grounded);
-              physicsAccumulator -= fixedStep;
-            }
+            if (zone === "space") spaceMotion(dt, p);
+            else if (!(zone === "cyber" && spectator))
+              groundMotion(dt, p, grounded, now);
             if (respawnAnim) {
-              physicsAccumulator = 0;
               renderer.render(scene, camera);
               return;
             }
-          } else physicsAccumulator = 0;
-          const position = player.rigid.translation();
-          const actualPosition = v(position.x, position.y, position.z);
-          if (!previousPhysicsPosition || !running)
-            previousPhysicsPosition = actualPosition.clone();
-          const alpha = running
-            ? Math.min(1, physicsAccumulator / (1 / 60))
-            : 1;
-          const p = previousPhysicsPosition.clone().lerp(actualPosition, alpha);
-          let yawDelta = player.yaw - previousPhysicsYaw;
-          while (yawDelta > Math.PI) yawDelta -= 2 * Math.PI;
-          while (yawDelta < -Math.PI) yawDelta += 2 * Math.PI;
-          const visualYaw = running
-            ? previousPhysicsYaw + yawDelta * alpha
-            : player.yaw;
+            scoreUpdate(p, grounded);
+          }
           player.mesh.position.copy(p);
           if (zone === "snow") player.mesh.position.y -= 1.5;
           if (zone === "space") player.mesh.position.y -= 0.15;
-          player.mesh.rotation.y = visualYaw;
+          player.mesh.rotation.y = player.yaw;
+          if (zone === "cyber")
+            player.rigid.setRotation(
+              {
+                x: 0,
+                y: Math.sin(player.yaw / 2),
+                z: 0,
+                w: Math.cos(player.yaw / 2),
+              },
+              true,
+            );
           if (zone === "snow" || zone === "halloween") {
             let angle = Math.atan2(
                 p.x - zones[zone].origin.x,
@@ -2557,5 +2520,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a530ddedac2ae82c',t:'MTc5MzQzMDkwOQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a530ddedac2ae82c',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a530e69ffeb5112b',t:'MTc5MzQzMTI2NQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a530e69ffeb5112b',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
