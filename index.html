@@ -403,20 +403,32 @@
       canvas {display:block; touch-action:none;}
       .world-switch { position:absolute; top:16px; left:16px; pointer-events:auto; z-index:30; }
       #world-menu-toggle { width:48px; height:48px; }
-      #world-menu {position:absolute; top:56px; left:0; width:200px; padding:10px !important;}
+      #world-menu {position:absolute; top:56px; left:0; width:240px; padding:10px !important;}
       .world-tabs {display:flex; flex-direction:column; gap:4px;}
       .world-tabs button {text-align:left; font:500 14px 'Rubik','M PLUS 1p',sans-serif; border-radius:14px; padding:11px 14px; color:var(--md-sys-color-on-surface); border:0; background:transparent; cursor:pointer;}
       .world-tabs button:hover {background:rgba(255,255,255,.1);}
       .world-tabs button.active {color:var(--md-sys-color-on-primary); background:var(--md-sys-color-primary);}
       #zone-status {font-size:11px; margin:8px 12px 4px; opacity:.7;}
       .initial-options {display:grid;grid-template-columns:1fr 1fr; gap:10px; width:100%;}
-      .initial-options button {border-radius:16px; height:auto; min-height:54px;}
+      .initial-options button {border-radius:16px; height:auto; min-height:54px; white-space:normal; line-height:1.3; padding:8px;}
       .initial-status {font-size:12px; opacity:.7; margin-top:14px;}
       .progress-indeterminate {width:32% !important; animation:indeterminate 1.3s infinite ease-in-out;}
       @keyframes indeterminate {0% {transform:translateX(-110%)} 100% {transform:translateX(330%)}}
       .load-error-actions {display:flex;gap:12px;margin-top:20px;}
+      @media(max-height:450px) {
+        #initial-select .m3-card {padding:16px;}
+        #initial-select .modal-icon {width:42px;height:42px;margin-bottom:6px;}
+        #initial-select .modal-icon span {font-size:24px;}
+        #initial-select .modal-title {font-size:1.25rem;margin-bottom:4px;}
+        #initial-select .modal-desc {margin-bottom:10px;}
+        #initial-select .initial-options button {min-height:40px;}
+        #initial-select .initial-status {margin-top:8px;}
+        .world-tabs button {padding:7px 14px;}
+        #world-menu {max-height:calc(100vh - 75px);overflow-y:auto;}
+      }
       #touch-ui {display:none;}
       #touch-ui.touch-enabled {display:block;}
+      #touch-ui.spectator-hidden {display:none !important;}
       @media(pointer:coarse) { #touch-ui {display:block;} }
       @media(max-width:650px) {
           .world-switch {top:8px; left:8px;}
@@ -451,10 +463,10 @@
         </button>
         <div id="world-menu" class="m3-card compact hidden">
           <div class="world-tabs">
-            <button data-zone="cyber">赛博</button
-            ><button data-zone="snow">冰雪</button
-            ><button data-zone="space">太空</button
-            ><button data-zone="halloween">万圣节</button>
+            <button data-zone="cyber">赛博坦克</button
+            ><button data-zone="space">航天日</button
+            ><button data-zone="halloween">不给糖就捣蛋</button
+            ><button data-zone="snow">3D坦克和雪陷阱</button>
           </div>
           <div id="zone-status"></div>
         </div>
@@ -471,17 +483,17 @@
           <p id="select-desc" class="modal-desc">选择一个场景后再开始加载</p>
           <div class="initial-options">
             <button class="m3-btn-primary" data-initial-zone="cyber" disabled>
-              赛博</button
-            ><button class="m3-btn-primary" data-initial-zone="snow" disabled>
-              冰雪</button
+              赛博坦克</button
             ><button class="m3-btn-primary" data-initial-zone="space" disabled>
-              太空</button
+              航天日</button
             ><button
               class="m3-btn-primary"
               data-initial-zone="halloween"
               disabled
             >
-              万圣节
+              不给糖就捣蛋</button
+            ><button class="m3-btn-primary" data-initial-zone="snow" disabled>
+              3D坦克和雪陷阱
             </button>
           </div>
           <p id="initial-status" class="initial-status">正在初始化…</p>
@@ -846,24 +858,24 @@
           movement: "cyber",
         },
         snow: {
-          name: "坦克与雪之陷阱",
+          name: "3D坦克和雪陷阱",
           origin: v(-1200, 0, 0),
           gravity: -60,
           camera: [10, 200, 55],
           movement: "snow",
         },
         space: {
-          name: "太空中的坦克",
+          name: "航天日",
           origin: v(0, 0, 0),
           gravity: 0,
-          camera: [1.5, 8, 6],
+          camera: [1, 8, 3],
           movement: "space",
         },
         halloween: {
-          name: "万圣节：甜蜜或捣蛋",
+          name: "不给糖就捣蛋",
           origin: v(0, 0, 1200),
           gravity: -9.81,
-          camera: [5, 55, 20],
+          camera: [2.5, 35, 7],
           movement: "halloween",
         },
       };
@@ -1500,6 +1512,10 @@
         visualRotation.rotation.y = Math.PI / 2; // Corrected 90° visual rotation (no collider rotation).
         visualRotation.add(mesh);
         model.add(visualRotation);
+        model.updateMatrixWorld(true);
+        const visualBottom = new THREE.Box3().setFromObject(model).min.y;
+        // Match the visual bottom to the rounded body's contact surface.
+        visualRotation.position.y = -(0.35 + 0.08) - visualBottom - 0.02;
         makePlayer(
           "halloween",
           model,
@@ -1734,9 +1750,16 @@
           saveState();
           zone = id;
           document.documentElement.dataset.zone = id;
-          controls.enablePan = id === "cyber" && spectator;
+          freePointers.clear();
+          freeGesture = null;
+          controls.enabled = !(id === "cyber" && spectator);
+          controls.enablePan = false;
+          $("touch-ui").classList.toggle(
+            "spectator-hidden",
+            id === "cyber" && spectator,
+          );
           document
-            .querySelectorAll("[data-zone]")
+            .querySelectorAll("button[data-zone]")
             .forEach((b) =>
               b.classList.toggle("active", b.dataset.zone === id),
             );
@@ -1788,7 +1811,10 @@
             .copy(cameraStart)
             .add(v(dist * 0.6, dist * 0.65, dist));
           controls.target.copy(cameraStart);
-          controls.update();
+          if (id === "cyber" && spectator) {
+            camera.lookAt(cameraStart);
+            camera.rotation.reorder("YXZ");
+          } else controls.update();
           light.position.copy(cameraStart).add(v(50, 100, 50));
           light.target.position.copy(cameraStart);
           scene.add(light.target);
@@ -1860,6 +1886,10 @@
         }
         if (rollBack) score = Math.min(102, checkpoint * 17);
         const p = spawnForCheckpoint();
+        const oldTranslation = player.rigid.translation();
+        const cameraTranslation = p
+          .clone()
+          .sub(v(oldTranslation.x, oldTranslation.y, oldTranslation.z));
         player.rigid.setTranslation(p, true);
         player.rigid.setLinvel({ x: 0, y: 0, z: 0 }, true);
         player.rigid.setAngvel({ x: 0, y: 0, z: 0 }, true);
@@ -1870,17 +1900,9 @@
           p.z - zones[zone].origin.z,
         );
         if (!silent) {
-          controls.target.copy(p);
-          camera.position
-            .copy(p)
-            .add(
-              v(
-                zone === "space" ? 4 : 20,
-                zone === "space" ? 4 : 20,
-                zone === "space" ? 5 : 30,
-              ),
-            );
-          controls.update();
+          camera.position.add(cameraTranslation);
+          controls.target.add(cameraTranslation);
+          if (!(zone === "cyber" && spectator)) controls.update();
         }
         lastGrounded = -1e4;
         jumpWasHeld = false;
@@ -1899,8 +1921,7 @@
         const endTarget = spawn.clone();
         if (zone === "snow") endTarget.y = zones.snow.origin.y + 10;
         if (zone === "space") endTarget.y -= 5;
-        const distance = Math.hypot(offset.x, offset.z);
-        const endPos = endTarget.clone().add(v(-distance, offset.y, 0));
+        const endPos = endTarget.clone().add(offset);
         respawnAnim = {
           fromPos,
           fromTarget,
@@ -2161,7 +2182,8 @@
         player.rigid.setLinvel({ x: horizontal.x, y, z: horizontal.z }, true);
         if (cyberImpulse)
           player.rigid.applyImpulse({ x: 0, y: 3500, z: 0 }, true);
-        if (p.y < (zone === "snow" ? -50 : -120)) triggerRespawn();
+        const fallLimit = zone === "snow" ? -50 : zone === "cyber" ? -30 : -8;
+        if (p.y < zones[zone].origin.y + fallLimit) triggerRespawn();
       }
       const clock = new THREE.Clock();
       function animate() {
@@ -2197,7 +2219,7 @@
               respawnAnim.endTarget,
               ease,
             );
-            controls.update();
+            if (!(zone === "cyber" && spectator)) controls.update();
             if (t >= 1) {
               player.mesh.visible = true;
               respawnAnim = null;
@@ -2216,6 +2238,7 @@
             if (zone === "space") spaceMotion(dt, p);
             else if (!(zone === "cyber" && spectator))
               groundMotion(dt, p, grounded, now);
+            else if (p.y < zones.cyber.origin.y - 30) triggerRespawn();
             if (respawnAnim) {
               renderer.render(scene, camera);
               return;
@@ -2261,7 +2284,7 @@
             );
             camera.position.copy(controls.target).add(offset);
           }
-          controls.update();
+          if (!(zone === "cyber" && spectator)) controls.update();
           updateHUD();
         }
         renderer.render(scene, camera);
@@ -2310,10 +2333,95 @@
         if (zone === "snow" || zone === "halloween") autoCamera = !autoCamera;
         updateHUD();
       };
+      const freePointers = new Map();
+      let freeGesture = null;
+      function freeTwoFinger() {
+        const a = [...freePointers.values()];
+        if (a.length !== 2) return null;
+        return {
+          x: (a[0].x + a[1].x) / 2,
+          y: (a[0].y + a[1].y) / 2,
+          d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y),
+        };
+      }
+      const freeActive = () => zone === "cyber" && spectator && !loading;
+      renderer.domElement.addEventListener("pointerdown", (e) => {
+        if (!freeActive()) return;
+        freePointers.set(e.pointerId, {
+          x: e.clientX,
+          y: e.clientY,
+          button: e.button,
+        });
+        try {
+          renderer.domElement.setPointerCapture(e.pointerId);
+        } catch {}
+        freeGesture = freeTwoFinger();
+      });
+      renderer.domElement.addEventListener("pointermove", (e) => {
+        if (!freeActive()) return;
+        const p = freePointers.get(e.pointerId);
+        if (!p) return;
+        const dx = e.clientX - p.x,
+          dy = e.clientY - p.y;
+        p.x = e.clientX;
+        p.y = e.clientY;
+        if (freePointers.size === 1) {
+          if (p.button === 2) {
+            camera.translateX(-dx * 0.05);
+            camera.translateY(dy * 0.05);
+          } else {
+            camera.rotation.y -= dx * 0.004;
+            camera.rotation.x = Math.max(
+              -Math.PI / 2,
+              Math.min(Math.PI / 2, camera.rotation.x - dy * 0.004),
+            );
+          }
+        } else if (freePointers.size === 2) {
+          const now = freeTwoFinger();
+          if (freeGesture && now) {
+            camera.translateX(-(now.x - freeGesture.x) * 0.05);
+            camera.translateY((now.y - freeGesture.y) * 0.05);
+            camera.translateZ(-(now.d - freeGesture.d) * 0.05);
+          }
+          freeGesture = now;
+        }
+      });
+      function endFreePointer(e) {
+        freePointers.delete(e.pointerId);
+        freeGesture = freeTwoFinger();
+      }
+      renderer.domElement.addEventListener("pointerup", endFreePointer);
+      renderer.domElement.addEventListener("pointercancel", endFreePointer);
+      renderer.domElement.addEventListener(
+        "wheel",
+        (e) => {
+          if (freeActive()) {
+            e.preventDefault();
+            camera.translateZ(e.deltaY * 0.01);
+          }
+        },
+        { passive: false },
+      );
+      renderer.domElement.addEventListener("contextmenu", (e) => {
+        if (freeActive()) e.preventDefault();
+      });
       $("spectator-toggle").onclick = () => {
         if (zone !== "cyber") return;
         spectator = !spectator;
-        controls.enablePan = spectator;
+        keyboard.f = keyboard.t = 0;
+        keyboard.jump = false;
+        joy.x = joy.y = 0;
+        freePointers.clear();
+        freeGesture = null;
+        $("touch-ui").classList.toggle("spectator-hidden", spectator);
+        controls.enabled = !spectator;
+        controls.enablePan = false;
+        if (spectator) camera.rotation.reorder("YXZ");
+        else {
+          const pos = player.rigid.translation();
+          controls.target.set(pos.x, pos.y, pos.z);
+          controls.update();
+        }
         updateHUD();
       };
       // The original UI enters full screen on interaction where supported.
@@ -2333,13 +2441,10 @@
       });
       $("about").onclick = () => {
         const names = {
-          snow: tr(
-            "3D坦克和雪陷阱（玩法重构）",
-            "Tanki and The Snow Trap (Rework)",
-          ),
-          space: tr("太空中的坦克（玩法重构）", "Tanks in Space (Rework)"),
+          snow: tr("3D坦克和雪陷阱", "Tanki and The Snow Trap (Rework)"),
+          space: tr("航天日", "Cosmonautics Day"),
           cyber: tr("赛博坦克", "CyberTank"),
-          halloween: tr("万圣节：糖果或捣蛋", "Halloween: Trick or Treat"),
+          halloween: tr("不给糖就捣蛋", "Trick or Treat"),
         };
         $("help-title").textContent = names[zone];
         $("help-text").innerHTML =
@@ -2374,7 +2479,7 @@
         if (!e.target.closest("#world-switch")) closeWorldMenu();
       });
       document
-        .querySelectorAll("[data-zone]")
+        .querySelectorAll("button[data-zone]")
         .forEach((b) => (b.onclick = () => selectZone(b.dataset.zone)));
       document
         .querySelectorAll("[data-initial-zone]")
@@ -2472,22 +2577,15 @@
         camera.updateProjectionMatrix();
       });
 
-      document.querySelector("[data-zone=cyber]").textContent = tr(
-        "赛博",
-        "Cyber",
-      );
-      document.querySelector("[data-zone=snow]").textContent = tr(
-        "冰雪",
-        "Snow",
-      );
-      document.querySelector("[data-zone=space]").textContent = tr(
-        "太空",
-        "Space",
-      );
-      document.querySelector("[data-zone=halloween]").textContent = tr(
-        "万圣节",
-        "Halloween",
-      );
+      const labelMap = {
+        cyber: tr("赛博坦克", "CyberTank"),
+        space: tr("航天日", "Cosmonautics Day"),
+        halloween: tr("不给糖就捣蛋", "Trick or Treat"),
+        snow: tr("3D坦克和雪陷阱", "3D Tank and the Snow Trap"),
+      };
+      document
+        .querySelectorAll("button[data-zone]")
+        .forEach((b) => (b.textContent = labelMap[b.dataset.zone]));
       if ("ontouchstart" in window || navigator.maxTouchPoints > 0)
         $("touch-ui").classList.add("touch-enabled");
       $("start-prompt").addEventListener("keydown", (e) => {
@@ -2502,12 +2600,6 @@
         "You've reached 102 points and finished all 6 laps.",
       );
       $("reset-btn-text").textContent = tr("再来一次", "PLAY AGAIN");
-      const labelMap = {
-        cyber: tr("赛博", "Cyber"),
-        snow: tr("冰雪", "Snow"),
-        space: tr("太空", "Space"),
-        halloween: tr("万圣节", "Halloween"),
-      };
       document.querySelectorAll("[data-initial-zone]").forEach((b) => {
         b.textContent = labelMap[b.dataset.initialZone];
         b.disabled = false;
@@ -2523,5 +2615,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a530ee5fb9cd112b',t:'MTc5MzQzMTU4Mg=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a530ee5fb9cd112b',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5310e9b0bb21153',t:'MTc5MzQzMjkwMg=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5310e9b0bb21153',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
