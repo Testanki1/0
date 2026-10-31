@@ -1,0 +1,224 @@
+name: 整理四个主题资源
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: organize-assets-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  organize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出所选分支
+        uses: actions/checkout@v4
+
+      - name: 整理资源并更新页面引用
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import defaultdict
+          from urllib.parse import urlsplit, urlunsplit, unquote, quote
+          import hashlib
+          import os
+          import re
+          import shutil
+
+          root = Path.cwd().resolve()
+          themes = ('cybertank', 'tanki-and-the-snow-trap', 'tanks-in-space', 'trick-or-treat')
+          extensions = {
+              '.mp3', '.opus', '.ogg', '.wav', '.m4a', '.aac', '.flac',
+              '.glb', '.bin', '.png', '.jpg', '.jpeg', '.webp', '.gif',
+              '.svg', '.exr', '.hdr', '.ktx', '.ktx2', '.dds',
+              '.woff', '.woff2', '.ttf', '.otf',
+          }
+          text_extensions = {'.html', '.htm', '.js', '.mjs', '.css'}
+          hash_suffix = re.compile(r'\.[0-9a-fA-F]{8,}(?=\.[^.]+$)')
+          quoted = re.compile(r'(?P<q>[\'"`])(?P<value>[^\'"`\r\n]*)(?P=q)')
+
+          def digest(path):
+              result = hashlib.sha256()
+              with path.open('rb') as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b''):
+                      result.update(block)
+              return result.hexdigest()
+
+          def inside(path):
+              try:
+                  path.relative_to(root)
+                  return True
+              except ValueError:
+                  return False
+
+          # Read both the old locations and the new ones, making repeated runs
+          # safe and allowing newly added hashed assets to be organized later.
+          groups = defaultdict(list)
+          old_to_new = {}
+          ignored = []
+          for theme in themes:
+              for folder in (root / theme, root / 'assets' / theme):
+                  if not folder.exists():
+                      continue
+                  if folder.is_symlink():
+                      raise SystemExit(f'拒绝处理符号链接目录: {folder}')
+                  for source in folder.rglob('*'):
+                      if source.is_symlink():
+                          raise SystemExit(f'拒绝处理符号链接: {source}')
+                      if not source.is_file():
+                          continue
+                      if source.suffix.lower() not in extensions:
+                          if source.suffix.lower() not in text_extensions:
+                              ignored.append(source.relative_to(root).as_posix())
+                          continue
+                      name = hash_suffix.sub('', source.name)
+                      destination = root / 'assets' / theme / name
+                      source = source.resolve()
+                      groups[destination].append(source)
+                      old_to_new[source] = destination
+
+          # Detect all collisions before writing or deleting anything. Equal
+          # files are safely deduplicated; different contents stop the run.
+          casefolded = {}
+          for destination, sources in sorted(groups.items()):
+              key = str(destination).casefold()
+              if key in casefolded and casefolded[key] != destination:
+                  raise SystemExit(f'大小写冲突：{casefolded[key]} / {destination}')
+              casefolded[key] = destination
+              if destination.exists() and destination not in sources:
+                  sources.append(destination)
+              if len({digest(source) for source in sources}) > 1:
+                  names = '\n  '.join(str(p.relative_to(root)) for p in sources)
+                  raise SystemExit(f'资源重名但内容不同，未进行任何修改：\n  {names}\n目标：{destination.relative_to(root)}')
+
+          # The latest repository may already have deleted these three local
+          # files. Its older HTML still points at them; use the verified official
+          # CDN only if no local copy is available to move.
+          cyber_cdn = 'https://web-cdn.tankionline.com/summer-game/dcrbtjllknft/models/'
+          missing_cyber = {}
+          for name in ('Minigame_Synth_Scene.glb', 'Minigame_Synth_Tank.glb',
+                       'Minigame_Synth_Environment_4096x2048.exr'):
+              for path in (root / 'cybertank' / 'assets' / name,
+                           root / 'assets' / 'cybertank' / name):
+                  if path not in old_to_new and not path.exists():
+                      missing_cyber[path] = cyber_cdn + name
+
+          pages = []
+          if (root / 'index.html').is_file():
+              pages.append(root / 'index.html')
+          for theme in themes:
+              folder = root / theme
+              if folder.exists():
+                  pages.extend(p for p in folder.rglob('*')
+                               if p.is_file() and p.suffix.lower() in text_extensions)
+          changes = {}
+          missing = set()
+          for page in sorted(set(pages)):
+              original = page.read_text(encoding='utf-8')
+              def replace(match):
+                  value = match.group('value')
+                  if not value or len(value) > 1000:
+                      return match.group(0)
+                  try:
+                      parsed = urlsplit(value)
+                  except ValueError:
+                      return match.group(0)
+                  # Older copies of the merged HTML point at the original
+                  # Halloween audio URLs. If those files are in the repo,
+                  # make them use the newly organized local copies too.
+                  if (parsed.scheme in ('http', 'https') and
+                      parsed.netloc.lower() == 'pages.tankionline.com' and
+                      parsed.path.startswith('/audio/halloween/')):
+                      name = Path(parsed.path).name
+                      source = root / 'trick-or-treat' / 'audio' / name
+                      destination = old_to_new.get(source)
+                      if destination is None:
+                          existing = root / 'assets' / 'trick-or-treat' / name
+                          if existing.exists():
+                              destination = existing
+                      if destination is not None:
+                          relative = os.path.relpath(destination, page.parent).replace(os.sep, '/')
+                          updated = urlunsplit(('', '', relative, parsed.query, parsed.fragment))
+                          return match.group('q') + updated + match.group('q')
+                  if parsed.scheme or parsed.netloc or not parsed.path:
+                      return match.group(0)
+                  raw_path = unquote(parsed.path)
+                  if raw_path.startswith('/'):
+                      previous = (root / raw_path.lstrip('/')).resolve()
+                  else:
+                      previous = (page.parent / raw_path).resolve()
+                  if not inside(previous):
+                      return match.group(0)
+                  target = old_to_new.get(previous)
+                  if target is not None:
+                      relative = os.path.relpath(target, page.parent).replace(os.sep, '/')
+                      if '%' in parsed.path:
+                          relative = quote(relative, safe='/.-_~')
+                      updated = urlunsplit(('', '', relative, parsed.query, parsed.fragment))
+                  elif previous in missing_cyber:
+                      updated = missing_cyber[previous]
+                      if parsed.query:
+                          updated += '?' + parsed.query
+                      if parsed.fragment:
+                          updated += '#' + parsed.fragment
+                  else:
+                      # Fail before changes if a known local resource is missing.
+                      # External URLs and unrelated strings are deliberately left alone.
+                      rel = previous.relative_to(root).as_posix()
+                      first = rel.split('/', 1)[0]
+                      if (previous.suffix.lower() in extensions and not previous.exists()
+                          and (first in themes or rel.startswith('assets/'))):
+                          missing.add(f'{page.relative_to(root)} -> {value}')
+                      return match.group(0)
+                  return match.group('q') + updated + match.group('q')
+              rewritten = quoted.sub(replace, original)
+              if rewritten != original:
+                  changes[page] = rewritten
+
+          if missing:
+              raise SystemExit('页面引用了仓库中不存在的本地资源，未进行任何修改：\n  ' + '\n  '.join(sorted(missing)))
+
+          moved = 0
+          for destination, sources in sorted(groups.items()):
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              if not destination.exists():
+                  shutil.copy2(sources[0], destination)
+              for source in sources:
+                  if source != destination and source.exists():
+                      source.unlink()
+                      moved += 1
+          for page, text in changes.items():
+              page.write_text(text, encoding='utf-8')
+          for theme in themes:
+              for folder in (root / theme, root / 'assets' / theme):
+                  if folder.exists():
+                      for directory in sorted((p for p in folder.rglob('*') if p.is_dir()),
+                                              key=lambda p: len(p.parts), reverse=True):
+                          try:
+                              directory.rmdir()
+                          except OSError:
+                              pass
+          print(f'已整理 {moved} 个原位置的资源，修改 {len(changes)} 个页面/脚本/样式。')
+          if ignored:
+              print('未移动的非媒体文件（例如说明文件）：')
+              for name in sorted(ignored):
+                  print('  ' + name)
+          PY
+
+      - name: 提交并推送整理结果
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            echo '没有需要提交的变化。'
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit -m 'Organize theme assets'
+          git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
