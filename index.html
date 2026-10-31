@@ -8,309 +8,410 @@
     />
     <meta name="theme-color" content="#001926" />
     <title>坦克四界 · 融合世界</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;500;700;800&family=Rubik:wght@400;500;700&display=swap"
+    />
     <style>
       * {
-        box-sizing: border-box;
-        -webkit-tap-highlight-color: transparent;
+      -webkit-tap-highlight-color: transparent;
       }
-      html,
+      :root {
+          /* M3 Dark Theme Token Palette - Custom Green/DarkBlue */
+          --md-sys-color-primary: #00D4FF;
+          --md-sys-color-on-primary: #001926;
+          --md-sys-color-primary-container: rgba(0, 212, 255, 0.2);
+          --md-sys-color-on-primary-container: #00D4FF;
+          --md-sys-color-secondary: #CCC2DC;
+          --md-sys-color-on-secondary: #332D41;
+          --md-sys-color-secondary-container: #4A4458;
+          --md-sys-color-on-secondary-container: #E8DEF8;
+          --md-sys-color-tertiary: #FF6666;
+          --md-sys-color-on-tertiary: #492532;
+          --md-sys-color-tertiary-container: #633B48;
+          --md-sys-color-on-tertiary-container: #FFD8E4;
+          --md-sys-color-surface: #001926;
+          --md-sys-color-on-surface: #BFD5FF;
+          --md-sys-color-surface-variant: rgba(255, 255, 255, 0.1);
+          --md-sys-color-on-surface-variant: #CAC4D0;
+          --md-sys-color-outline: #938F99;
+          --md-sys-color-surface-container: #1D1B20;
+          --md-sys-color-surface-container-high: rgba(0, 25, 38, 0.5);
+      }
+
       body {
-        margin: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #001926;
-        color: #e8f3fa;
-        font-family:
-          system-ui,
-          -apple-system,
-          "Microsoft YaHei",
-          sans-serif;
-        user-select: none;
+          margin: 0;
+          overflow: hidden;
+          background-color: var(--md-sys-color-surface);
+          color: var(--md-sys-color-on-surface);
+          font-family: 'Rubik', 'M PLUS 1p', sans-serif;
+          user-select: none;
+          -webkit-user-select: none;
+          touch-action: none;
+          opacity: 1; /* Keep the UI usable even if remote fonts fail to load. */
+          transition: opacity 0.5s ease-in-out;
       }
-      canvas {
-        display: block;
-        touch-action: none;
+
+      h1, h2, h3, p { margin: 0; }
+
+      /* --- M3 Expressive Components --- */
+
+      .material-symbols-rounded { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+      /* Cards */
+      .m3-card {
+          background-color: rgba(0, 25, 38, 0.6);
+          color: var(--md-sys-color-on-surface);
+          border-radius: 28px;
+          box-shadow: 0 4px 8px rgba(0,0,0,0.2), 0 0 0 1px rgba(255,255,255,0.1);
+          padding: 24px;
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
       }
-      .ui {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
+
+      .m3-card.compact {
+          border-radius: 16px;
+          padding: 12px 24px;
+          background-color: rgba(0, 25, 38, 0.6);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(255,255,255,0.1);
       }
-      .panel {
-        pointer-events: auto;
-        background: rgba(0, 25, 38, 0.82);
-        border: 1px solid #ffffff25;
-        box-shadow: 0 8px 30px #0005;
-        border-radius: 17px;
-        backdrop-filter: blur(12px);
+
+      /* Buttons */
+      .m3-btn-primary {
+          background-color: var(--md-sys-color-primary);
+          color: var(--md-sys-color-on-primary);
+          border-radius: 100px;
+          height: 40px;
+          padding: 0 24px;
+          font-weight: 700;
+          font-size: 14px;
+          letter-spacing: 0.1px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: all 0.2s cubic-bezier(0.2, 0.0, 0, 1.0);
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          text-transform: uppercase;
+          border: none;
+          cursor: pointer;
       }
-      .worlds {
-        position: absolute;
-        top: 14px;
-        left: 14px;
-        padding: 12px;
-        max-width: calc(100vw - 255px);
+      .m3-btn-primary:active {
+          transform: scale(0.98);
+          box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+          background-color: var(--md-sys-color-on-primary-container);
+          color: var(--md-sys-color-primary-container);
       }
-      .brand {
-        font-weight: 900;
-        font-size: 15px;
-        margin-bottom: 8px;
+      .m3-btn-primary:disabled {
+          background-color: var(--md-sys-color-surface-variant);
+          color: var(--md-sys-color-on-surface-variant);
+          cursor: not-allowed;
+          box-shadow: none;
       }
-      .brand em {
-        color: #adf9a1;
-        font-style: normal;
-      }
-      .tabs {
-        display: flex;
-        gap: 5px;
-        flex-wrap: wrap;
-      }
-      button {
-        font: inherit;
-        cursor: pointer;
-        color: #e5f5f8;
-        border: 1px solid #ffffff35;
-        background: #ffffff12;
-        border-radius: 8px;
-        padding: 8px 11px;
-        touch-action: manipulation;
-      }
-      button:hover {
-        background: #ffffff22;
-      }
-      button.active {
-        background: #b8f69d;
-        color: #082313;
-        border-color: #b8f69d;
-      }
-      button:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-      .hud {
-        position: absolute;
-        top: 14px;
-        right: 14px;
-        padding: 14px;
-        width: 225px;
-      }
-      .hud .row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 6px;
-      }
-      .muted {
-        color: #a5b9c9;
-        font-size: 12px;
-      }
-      .hud strong {
-        font-size: 28px;
-      }
-      .hud small {
-        color: #a6b8c7;
-      }
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 5px;
-        margin-top: 9px;
-      }
-      .actions button {
-        padding: 7px;
-        font-size: 12px;
-      }
-      .hint {
-        position: absolute;
-        bottom: 14px;
-        left: 50%;
-        transform: translateX(-50%);
-        font-size: 12px;
-        padding: 8px 12px;
-        white-space: nowrap;
-      }
-      .toast {
-        position: absolute;
-        top: 28%;
-        left: 50%;
-        transform: translateX(-50%);
-        font-size: 25px;
-        font-weight: 900;
-        color: #e2ffb0;
-        text-shadow: 0 2px 12px #000;
-        opacity: 0;
-        transition: opacity 0.2s;
-      }
-      .toast.show {
-        opacity: 1;
-      }
-      .screen {
-        position: absolute;
-        inset: 0;
-        background: #00121cdd;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: auto;
-      }
-      .screen.hidden,
-      .hidden {
-        display: none !important;
-      }
-      .dialog {
-        width: min(90vw, 480px);
-        padding: 28px;
-        text-align: center;
-      }
-      .dialog h1 {
-        font-size: 26px;
-        margin: 0 0 8px;
-      }
-      .dialog p {
-        color: #b8cbd6;
-        line-height: 1.6;
-      }
-      .dialog button.primary {
-        background: #aefa9f;
-        color: #112612;
-        font-weight: 800;
-        padding: 12px 25px;
-      }
-      .meter {
-        width: 100%;
-        height: 8px;
-        background: #ffffff20;
-        border-radius: 8px;
-        overflow: hidden;
-      }
-      .meter div {
-        height: 100%;
-        width: 0;
-        background: #aefa9f;
-      }
-      .touch {
-        display: none;
-        pointer-events: none;
-      }
-      .stick {
-        position: absolute;
-        left: 28px;
-        bottom: 28px;
-        width: 120px;
-        height: 120px;
-        border-radius: 50%;
-        background: #ffffff18;
-        border: 1px solid #ffffff44;
-        pointer-events: auto;
-        touch-action: none;
-      }
-      .knob {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 50px;
-        height: 50px;
-        transform: translate(-50%, -50%);
-        border-radius: 50%;
-        background: #e8ffe1a0;
-      }
-      .jump {
-        position: absolute;
-        right: 28px;
-        bottom: 28px;
-        width: 82px;
-        height: 82px;
-        border-radius: 50%;
-        font-size: 26px;
-        pointer-events: auto;
-        touch-action: none;
-      }
-      .scorepop {
-        position: fixed;
-        color: #adff9e;
-        font-weight: 900;
-        font-size: 23px;
-        text-shadow: 0 2px 8px #000;
-        pointer-events: none;
-        animation: rise 1s forwards;
-      }
-      @keyframes rise {
-        to {
-          opacity: 0;
-          transform: translateY(-60px);
-        }
-      }
-      .menu-toggle {
-        display: none;
-      }
-      @media (pointer: coarse) {
-        .touch {
-          display: block;
-        }
-        .hint {
-          bottom: 4px;
-        }
-      }
-      @media (max-width: 650px) {
-        .brand,
-        #zone-status {
-          display: none;
-        }
-        .menu-toggle {
-          display: inline-block;
-          margin-top: 4px;
-          padding: 4px 7px;
-          font-size: 10px;
-        }
-        .hud .actions {
-          display: none;
-        }
-        .hud.expanded .actions {
+
+      .m3-btn-icon {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
           display: flex;
-        }
-        .worlds {
-          left: 6px;
-          top: 6px;
-          padding: 7px;
-          max-width: calc(100vw - 147px);
-        }
-        .brand {
-          font-size: 12px;
-          margin-bottom: 4px;
-        }
-        .tabs button {
-          padding: 5px;
-          font-size: 11px;
-        }
-        .hud {
-          right: 6px;
-          top: 6px;
-          width: 135px;
-          padding: 8px;
-        }
-        .hud strong {
-          font-size: 21px;
-        }
-        .actions button {
-          padding: 5px;
-          font-size: 10px;
-        }
-        .hint {
-          font-size: 10px;
-        }
-        .stick {
-          width: 90px;
-          height: 90px;
-          left: 15px;
-          bottom: 20px;
-        }
-        .jump {
-          width: 64px;
-          height: 64px;
-          right: 15px;
-          bottom: 20px;
-        }
+          align-items: center;
+          justify-content: center;
+          background-color: rgba(0, 25, 38, 0.6);
+          color: var(--md-sys-color-on-surface-variant);
+          border: 1px solid rgba(255,255,255,0.1);
+          cursor: pointer;
+          transition: all 0.2s;
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+      }
+      .m3-btn-icon:hover {
+          background-color: var(--md-sys-color-surface-variant);
+          color: var(--md-sys-color-on-surface);
+      }
+      .m3-btn-icon.active {
+          background-color: var(--md-sys-color-primary-container);
+          color: var(--md-sys-color-on-primary-container);
+          border-color: var(--md-sys-color-primary);
+      }
+
+      .m3-btn-large {
+          height: 56px;
+          font-size: 16px;
+          padding: 0 32px;
+          border-radius: 100px;
+          width: 100%;
+      }
+
+      /* --- Layout & Utilities (Replaces Tailwind) --- */
+      #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+      .ui-layer {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10;
+          pointer-events: none;
+          display: flex; flex-direction: column; justify-content: space-between;
+          padding: 16px;
+          box-sizing: border-box;
+      }
+
+      .pointer-events-auto { pointer-events: auto; }
+      .pointer-events-none { pointer-events: none; }
+
+      .header-row {
+          display: flex; justify-content: space-between; align-items: flex-start; width: 100%;
+      }
+
+      .score-card {
+          display: flex; align-items: center; gap: 16px; min-width: 140px;
+      }
+
+      .icon-circle {
+          width: 40px; height: 40px; border-radius: 50%;
+          background-color: var(--md-sys-color-primary-container);
+          display: flex; align-items: center; justify-content: center;
+      }
+
+      .text-primary { color: var(--md-sys-color-on-primary-container); }
+
+      .lap-info {
+          font-size: 11px; font-weight: 500; opacity: 0.7;
+          text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px;
+      }
+
+      .score-container { display: flex; align-items: baseline; gap: 8px; }
+
+      .score-val { font-size: 1.25rem; font-weight: 700; line-height: 1.2; }
+      .score-range { font-size: 0.75rem; opacity: 0.5; font-weight: 500; }
+
+      .controls-row { display: flex; gap: 12px; }
+
+      /* Overlays */
+      .fullscreen-overlay {
+          position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          pointer-events: auto;
+          transition: opacity 0.5s ease;
+      }
+
+      .overlay-bg-dark {
+          background-color: rgba(0, 0, 0, 0.8);
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+          z-index: 40;
+      }
+
+      .overlay-bg-medium {
+          background-color: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          z-index: 50;
+      }
+
+      .loading-container { width: 256px; display: flex; flex-direction: column; margin-bottom: 24px; }
+      #loading-bar-container {
+          width: 100%; height: 4px; background: var(--md-sys-color-surface-variant);
+          border-radius: 2px; overflow: hidden; margin-bottom: 8px;
+      }
+      #loading-bar {
+          width: 0%; height: 100%; background: var(--md-sys-color-primary);
+          transition: width 0.3s ease;
+      }
+      .loading-text { text-align: center; font-size: 0.75rem; color: rgba(255,255,255,0.7); }
+
+      /* New Start Prompt Style */
+      .start-prompt {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+          color: var(--md-sys-color-primary);
+          animation: pulse 1.5s infinite ease-in-out;
+          cursor: pointer;
+      }
+
+      @keyframes pulse {
+          0% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.95); }
+          100% { opacity: 1; transform: scale(1); }
+      }
+
+      /* Modal Content */
+      .modal-content {
+          display: flex; flex-direction: column; items-center; text-align: center;
+          max-width: 24rem; margin: 0 16px; position: relative;
+      }
+
+      .modal-icon {
+          width: 64px; height: 64px; border-radius: 50%;
+          background-color: var(--md-sys-color-primary-container);
+          display: flex; align-items: center; justify-content: center;
+          margin-bottom: 16px; margin-left: auto; margin-right: auto;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .modal-icon span { font-size: 32px; color: var(--md-sys-color-on-primary-container); }
+
+      .modal-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; }
+      .modal-desc { font-size: 0.875rem; color: rgba(255,255,255,0.7); margin-bottom: 24px; line-height: 1.5; }
+
+      .close-btn {
+          position: absolute; top: 16px; right: 16px; padding: 8px;
+          color: var(--md-sys-color-on-surface-variant);
+          background: transparent; border: none; cursor: pointer; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          transition: background-color 0.2s;
+      }
+      .close-btn:hover { background-color: rgba(255,255,255,0.1); }
+
+      /* Joystick & Controls */
+      #joystick-zone {
+          position: absolute; bottom: 40px; left: 40px; width: 160px; height: 160px;
+          background: rgba(255, 255, 255, 0.05); border-radius: 50%;
+          pointer-events: auto; border: 2px solid rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(4px); transition: opacity 0.3s;
+      }
+      #joystick-knob {
+          position: absolute; top: 50%; left: 50%; width: 64px; height: 64px;
+          background: var(--md-sys-color-primary); border-radius: 50%;
+          transform: translate(-50%, -50%); box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+          pointer-events: none;
+      }
+
+      #jump-btn {
+          position: absolute; bottom: 40px; right: 40px; width: 96px; height: 96px;
+          border-radius: 28px; background-color: rgba(0, 25, 38, 0.6);
+          color: var(--md-sys-color-primary);
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+          border: 1px solid rgba(255,255,255,0.1);
+          pointer-events: auto; transition: transform 0.1s, box-shadow 0.1s, background-color 0.2s;
+          cursor: pointer; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      }
+      #jump-btn:active {
+          transform: scale(0.95); background-color: var(--md-sys-color-primary);
+          color: var(--md-sys-color-on-primary); box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+      }
+
+      .desktop-hint {
+          display: none; position: absolute; bottom: 32px; right: 32px;
+          opacity: 0.5; text-align: right; pointer-events: auto;
+      }
+      .desktop-hint p { font-size: 0.875rem; font-weight: 500; }
+
+      @media (min-width: 1024px) {
+          .desktop-hint { display: block; }
+      }
+
+      /* Animations */
+      .hidden { display: none !important; }
+      .opacity-0 { opacity: 0; }
+
+      .score-popup {
+          position: absolute; font-weight: bold; font-size: 24px;
+          color: #76FF33; pointer-events: none;
+          animation: popupFade 1s forwards;
+          text-shadow: 0 2px 4px rgba(0,0,0,0.5); z-index: 20;
+      }
+
+      @keyframes popupFade {
+          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+          20% { transform: translate(-50%, -100%) scale(1.2); opacity: 1; }
+          100% { transform: translate(-50%, -200%) scale(1.0); opacity: 0; }
+      }
+
+      .lap-notification {
+          position: absolute; top: 35%; left: 50%;
+          transform: translate(-50%, -50%) scale(0.5);
+          font-size: 4rem; font-weight: 900;
+          color: var(--md-sys-color-primary);
+          text-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
+          pointer-events: none; white-space: nowrap; z-index: 35;
+          opacity: 0; font-style: italic; letter-spacing: -1px;
+      }
+
+      .lap-animate {
+          animation: lapFlash 2.5s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+      }
+
+      @keyframes lapFlash {
+          0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; filter: blur(10px); }
+          15% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; filter: blur(0px); }
+          25% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; }
+          80% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; }
+          100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; filter: blur(5px); }
+      }
+
+      .animate-scaleIn {
+          animation: scaleIn 0.3s cubic-bezier(0.2, 0.0, 0, 1.0);
+      }
+      @keyframes scaleIn {
+          from { transform: scale(0.9); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+      }
+
+      /* Timer Styles */
+      .header-left {
+          display: flex; align-items: center; gap: 12px;
+      }
+
+      .timer-display {
+          background-color: rgba(0, 25, 38, 0.6);
+          border: 1px solid rgba(255,255,255,0.1);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border-radius: 100px;
+          padding: 8px 20px;
+          font-variant-numeric: tabular-nums;
+          font-weight: 700;
+          font-size: 1.25rem;
+          color: var(--md-sys-color-on-surface);
+          box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+          display: flex; align-items: center; gap: 8px;
+          height: 50px;
+          box-sizing: border-box;
+      }
+
+      .best-record-container {
+          margin-top: 24px;
+          display: flex; align-items: center; gap: 12px;
+          background: rgba(255,255,255,0.05);
+          padding: 8px 16px;
+          border-radius: 100px;
+      }
+      .best-record-text {
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: rgba(255,255,255,0.8);
+          font-variant-numeric: tabular-nums;
+      }
+      .delete-record-btn {
+          background: transparent; border: none; cursor: pointer;
+          padding: 4px; border-radius: 50%; color: var(--md-sys-color-tertiary);
+          display: flex; align-items: center; justify-content: center;
+      }
+      .delete-record-btn:hover { background: rgba(255, 102, 102, 0.1); }
+
+      #viewport { position:absolute; inset:0; z-index:1; }
+      canvas {display:block; touch-action:none;}
+      .world-switch { position:absolute; top:16px; left:16px; pointer-events:auto; max-width:calc(100% - 220px); z-index:12; padding:10px 14px !important; }
+      .world-tabs {display:flex; gap:6px; flex-wrap:wrap;}
+      .world-tabs button, .world-tools button {font: 500 12px 'Rubik','M PLUS 1p',sans-serif; border-radius:100px; padding:7px 11px; color:var(--md-sys-color-on-surface); border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.08); cursor:pointer;}
+      .world-tabs button.active {color:var(--md-sys-color-on-primary); background:var(--md-sys-color-primary);}
+      .world-tools {display:flex; gap:6px; margin-top:7px;}
+      #zone-status {font-size:11px; margin-top:6px; opacity:.7;}
+      #touch-ui {display:none;}
+      #touch-ui.touch-enabled {display:block;}
+      @media(pointer:coarse) { #touch-ui {display:block;} }
+      @media(max-width:650px) {
+          .world-switch {top:8px; left:8px; max-width:calc(100% - 190px); padding:8px !important;}
+          .world-tabs {gap:3px;} .world-tabs button,.world-tools button {font-size:10px; padding:5px 7px;}
+          #zone-status {display:none;} .ui-layer {padding:8px;}
+          #joystick-zone {width:110px;height:110px;left:15px;bottom:15px;}
+          #jump-btn {width:72px;height:72px;right:15px;bottom:15px;}
       }
     </style>
     <script type="importmap">
@@ -325,75 +426,314 @@
   </head>
   <body>
     <div id="viewport"></div>
-    <div class="ui">
-      <div class="worlds panel">
-        <div class="brand"><em>▰</em> 坦克四界 · 单一世界</div>
-        <div class="tabs">
+    <div id="ui-layer" class="ui-layer">
+      <div class="world-switch m3-card compact">
+        <div class="world-tabs">
           <button data-zone="cyber">赛博</button
           ><button data-zone="snow">冰雪</button
           ><button data-zone="space">太空</button
           ><button data-zone="halloween">万圣节</button>
         </div>
-        <div class="muted" id="zone-status" style="margin-top: 6px">准备中</div>
-      </div>
-      <div class="hud panel">
-        <div class="row"><b id="lap">圈数 1 / 6</b><b id="timer">00:00</b></div>
-        <div class="row">
-          <strong id="score">0</strong
-          ><span id="range" class="muted">0–17</span>
+        <div class="world-tools">
+          <button id="respawn">检查点</button
+          ><button id="fullscreen">全屏</button>
         </div>
-        <div class="muted">
-          最佳 <span id="best">—</span>
-          <button id="delete-best" style="padding: 2px 6px; font-size: 10px">
-            清除
+        <div id="zone-status"></div>
+      </div>
+      <!-- Header & Controls (Top Right) -->
+      <div
+        class="header-row pointer-events-auto"
+        style="
+          justify-content: flex-end;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 12px;
+        "
+      >
+        <!-- Score Card -->
+        <div class="m3-card compact score-card">
+          <div class="icon-circle">
+            <span class="material-symbols-rounded text-primary">flag</span>
+          </div>
+          <div>
+            <div style="display: flex; flex-direction: column">
+              <div style="display: flex; align-items: center; gap: 6px">
+                <span class="lap-info" id="lap-display" style="margin: 0"
+                  >Lap 1/6</span
+                >
+                <span class="lap-info" style="margin: 0; opacity: 0.4">•</span>
+                <span
+                  class="lap-info"
+                  id="game-timer"
+                  style="margin: 0; font-variant-numeric: tabular-nums"
+                  >00:00</span
+                >
+                <button
+                  id="restart-game-btn"
+                  style="
+                    background: none;
+                    border: none;
+                    padding: 0 4px;
+                    color: var(--md-sys-color-on-surface);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    opacity: 0.7;
+                    margin-left: 4px;
+                  "
+                  title="Restart"
+                >
+                  <span class="material-symbols-rounded" style="font-size: 16px"
+                    >refresh</span
+                  >
+                </button>
+              </div>
+              <div
+                id="hud-best-container"
+                class="hidden"
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 4px;
+                  margin-top: 0px;
+                "
+              >
+                <span
+                  id="best-label"
+                  class="lap-info"
+                  style="color: #ffd700; opacity: 1"
+                  >Best</span
+                >
+                <span
+                  class="lap-info"
+                  id="hud-best-time"
+                  style="opacity: 1; font-variant-numeric: tabular-nums"
+                  >00:00</span
+                >
+                <button
+                  id="hud-delete-btn"
+                  style="
+                    background: none;
+                    border: none;
+                    padding: 0 4px;
+                    color: var(--md-sys-color-tertiary);
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    opacity: 0.7;
+                  "
+                >
+                  <span class="material-symbols-rounded" style="font-size: 14px"
+                    >close</span
+                  >
+                </button>
+              </div>
+            </div>
+            <div class="score-container" style="margin-top: 2px">
+              <h2 class="score-val" id="score-display">0</h2>
+              <span class="score-range" id="range-display">0-17</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-row">
+          <button
+            id="cam-toggle-btn"
+            class="m3-btn-icon active"
+            title="Auto Camera"
+          >
+            <span class="material-symbols-rounded">center_focus_weak</span>
+          </button>
+          <button id="sound-btn" class="m3-btn-icon" title="Sound On/Off">
+            <span class="material-symbols-rounded">volume_off</span>
+          </button>
+          <button id="about-btn" class="m3-btn-icon">
+            <span class="material-symbols-rounded">question_mark</span>
           </button>
         </div>
-        <button id="menu-toggle" class="menu-toggle">设置 ▾</button>
-        <div class="actions">
-          <button id="restart">重新开始</button
-          ><button id="respawn">检查点</button
-          ><button id="sound">声音：关</button
-          ><button id="camera">自动镜头：开</button
-          ><button id="about">说明</button><button id="fullscreen">全屏</button>
+      </div>
+
+      <!-- Original loading and tap-to-start presentation -->
+      <div id="loading" class="fullscreen-overlay overlay-bg-dark">
+        <div class="loading-container">
+          <div id="loading-bar-container"><div id="loading-bar"></div></div>
+          <p id="loading-text" class="loading-text">Loading 0%</p>
+          <p id="loading-title" class="loading-text"></p>
         </div>
       </div>
-      <div id="hint" class="hint panel">
-        WASD / 方向键移动 · 空格跳跃 · 拖动视角
+      <div id="welcome" class="fullscreen-overlay overlay-bg-dark hidden">
+        <div id="start-prompt" class="start-prompt" role="button" tabindex="0">
+          <span class="material-symbols-rounded" style="font-size: 64px"
+            >play_arrow</span
+          ><span
+            id="start"
+            style="font-size: 24px; font-weight: 700; letter-spacing: 2px"
+            >TAP TO START</span
+          >
+        </div>
+        <div id="welcome-title" hidden></div>
+        <div id="welcome-desc" hidden></div>
       </div>
-      <div id="toast" class="toast"></div>
-      <div class="touch">
-        <div id="stick" class="stick"><div id="knob" class="knob"></div></div>
-        <button id="jump" class="jump">↑</button>
-      </div>
-      <div id="loading" class="screen">
-        <div class="dialog panel">
-          <h1 id="loading-title">正在加载场景</h1>
-          <p id="loading-text">请稍候…</p>
-          <div class="meter"><div id="loading-bar"></div></div>
+
+      <!-- Custom Confirmation Modal -->
+      <div
+        id="confirm-modal"
+        class="fullscreen-overlay overlay-bg-dark hidden"
+        style="z-index: 100"
+      >
+        <div
+          class="m3-card compact"
+          style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            min-width: 240px;
+            text-align: center;
+          "
+        >
+          <div style="font-weight: 700; font-size: 1rem" id="confirm-text">
+            Delete Best Record?
+          </div>
+          <div
+            style="
+              display: flex;
+              gap: 12px;
+              width: 100%;
+              justify-content: center;
+            "
+          >
+            <button
+              id="confirm-cancel"
+              class="m3-btn-primary"
+              style="
+                background-color: var(--md-sys-color-surface-variant);
+                color: var(--md-sys-color-on-surface);
+                height: 36px;
+                padding: 0 20px;
+              "
+            >
+              NO
+            </button>
+            <button
+              id="confirm-yes"
+              class="m3-btn-primary"
+              style="
+                background-color: var(--md-sys-color-tertiary);
+                color: var(--md-sys-color-on-tertiary);
+                height: 36px;
+                padding: 0 20px;
+              "
+            >
+              YES
+            </button>
+          </div>
         </div>
       </div>
-      <div id="welcome" class="screen hidden">
-        <div class="dialog panel">
-          <h1 id="welcome-title">准备出发</h1>
-          <p id="welcome-desc"></p>
-          <button id="start" class="primary">开始挑战</button>
+
+      <!-- Lap Notification Overlay -->
+      <div id="lap-notification" class="lap-notification"></div>
+
+      <!-- Win/Reset Screen -->
+      <div id="win-screen" class="fullscreen-overlay overlay-bg-medium hidden">
+        <div class="m3-card modal-content animate-scaleIn">
+          <div class="modal-icon">
+            <span class="material-symbols-rounded">emoji_events</span>
+          </div>
+          <h1 id="win-title" class="modal-title">Course Completed!</h1>
+          <p id="win-desc" class="modal-desc">
+            You've reached 102 points and finished all 6 laps.
+          </p>
+          <p
+            id="win-text"
+            class="modal-desc"
+            style="
+              font-weight: 700;
+              font-size: 1.25rem;
+              color: var(--md-sys-color-primary);
+              margin-top: -12px;
+            "
+          >
+            Time: 00:00
+          </p>
+
+          <button id="reset-btn" class="m3-btn-primary m3-btn-large">
+            <span class="material-symbols-rounded">replay</span>
+            <span id="reset-btn-text">RESET PROGRESS</span>
+          </button>
         </div>
       </div>
-      <div id="win" class="screen hidden">
-        <div class="dialog panel">
-          <h1>挑战完成！</h1>
-          <p id="win-text"></p>
-          <button id="replay" class="primary">再来一次</button>
+
+      <!-- About Modal -->
+      <div id="about-modal" class="fullscreen-overlay overlay-bg-medium hidden">
+        <div class="m3-card modal-content animate-scaleIn">
+          <button id="close-about-btn" class="close-btn">
+            <span class="material-symbols-rounded">close</span>
+          </button>
+
+          <div class="modal-icon">
+            <span class="material-symbols-rounded">sports_esports</span>
+          </div>
+          <h1 id="about-title" class="modal-title">Tanki Jump</h1>
+          <p id="about-desc" class="modal-desc">
+            Use Joystick or WASD to move.<br />
+            <strong>Counter-Clockwise</strong> jumps score points.<br />
+            Backward jumps deduct points.<br />
+            Double jumps = +2 points!
+          </p>
+          <div id="about-tip" class="score-range" style="margin-top: 16px">
+            Tip: Tap screen to enter Fullscreen
+          </div>
         </div>
       </div>
-      <div id="help" class="screen hidden">
-        <div class="dialog panel">
-          <h1 id="help-title">操作说明</h1>
-          <p id="help-text"></p>
-          <button id="close-help" class="primary">继续</button>
+
+      <!-- Touch Controls -->
+      <div
+        style="
+          width: 100%;
+          height: 100%;
+          position: absolute;
+          top: 0;
+          left: 0;
+          pointer-events: none;
+        "
+        id="touch-ui"
+      >
+        <div id="joystick-zone">
+          <div id="joystick-knob">
+            <span
+              class="material-symbols-rounded"
+              style="
+                color: #001926;
+                font-size: 32px;
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+              "
+              >drag_pan</span
+            >
+          </div>
         </div>
+        <button id="jump-btn">
+          <span
+            id="jump-icon"
+            class="material-symbols-rounded"
+            style="font-size: 48px"
+            >arrow_upward</span
+          >
+        </button>
+      </div>
+
+      <!-- Desktop Hint -->
+      <div class="m3-card compact desktop-hint">
+        <p id="desktop-hint-text">
+          WASD to Move • SPACE to Jump • Drag to Look
+        </p>
       </div>
     </div>
+
     <script type="module">
       import * as THREE from "three";
       import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -402,7 +742,32 @@
       import { EXRLoader } from "three/addons/loaders/EXRLoader.js";
       import { OrbitControls } from "three/addons/controls/OrbitControls.js";
       import * as RAPIER from "@dimforge/rapier3d-compat";
-      const $ = (id) => document.getElementById(id),
+      const uiIds = {
+        lap: "lap-display",
+        timer: "game-timer",
+        score: "score-display",
+        range: "range-display",
+        best: "hud-best-time",
+        "delete-best": "hud-delete-btn",
+        restart: "restart-game-btn",
+        sound: "sound-btn",
+        camera: "cam-toggle-btn",
+        about: "about-btn",
+        hint: "desktop-hint-text",
+        toast: "lap-notification",
+        stick: "joystick-zone",
+        knob: "joystick-knob",
+        jump: "jump-btn",
+        win: "win-screen",
+        replay: "reset-btn",
+        help: "about-modal",
+        "help-title": "about-title",
+        "help-text": "about-desc",
+        "close-help": "close-about-btn",
+      };
+      const isZh = (navigator.language || "en").toLowerCase().startsWith("zh");
+      const tr = (zh, en) => (isZh ? zh : en);
+      const $ = (id) => document.getElementById(uiIds[id] || id),
         v = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
       const zones = {
         cyber: {
@@ -568,15 +933,18 @@
       }
       function toast(txt) {
         $("toast").textContent = txt;
-        $("toast").classList.add("show");
+        $("toast").classList.remove("lap-animate");
+        void $("toast").offsetWidth;
+        $("toast").classList.add("lap-animate");
         clearTimeout(statusTimer);
         statusTimer = setTimeout(
-          () => $("toast").classList.remove("show"),
-          1600,
+          () => $("toast").classList.remove("lap-animate"),
+          2500,
         );
       }
       function progress(current, total) {
-        $("loading-text").textContent = `加载资源 ${current} / ${total}`;
+        $("loading-text").textContent =
+          `${tr("加载中", "Loading")} ${Math.round((current / total) * 100)}%`;
         $("loading-bar").style.width = (100 * current) / total + "%";
       }
       function colliderMesh(mesh) {
@@ -974,7 +1342,10 @@
         mesh.rotation.set(-Math.PI / 2, 0, Math.PI);
         mesh.scale.setScalar(0.0004);
         const model = new THREE.Group();
-        model.add(mesh);
+        const visualRotation = new THREE.Group();
+        visualRotation.rotation.y = -Math.PI / 2; // Turn only the visual model 90° left.
+        visualRotation.add(mesh);
+        model.add(visualRotation);
         makePlayer(
           "halloween",
           model,
@@ -1022,26 +1393,44 @@
       }
       function updateHUD() {
         $("lap").textContent =
-          `圈数 ${Math.min(6, Math.floor(score / 17) + 1)} / 6`;
+          `${tr("圈数", "Lap")} ${Math.min(6, Math.floor(score / 17) + 1)}/6`;
         $("timer").textContent = timeFmt(elapsed);
         $("score").textContent = score;
         const lap = Math.min(5, Math.floor(score / 17));
         $("range").textContent = `${lap * 17}–${(lap + 1) * 17}`;
         $("best").textContent = best === null ? "—" : timeFmt(best);
+        $("hud-best-container").classList.toggle("hidden", best === null);
+        $("best-label").textContent = tr("最佳", "Best");
         $("zone-status").textContent =
-          zones[zone].name + " · " + (running ? "进行中" : "已暂停");
-        $("camera").textContent =
+          zones[zone].name +
+          " · " +
+          (running ? tr("进行中", "Playing") : tr("已暂停", "Paused"));
+        $("cam-toggle-btn").style.display = zone === "space" ? "none" : "";
+        $("cam-toggle-btn").classList.toggle(
+          "active",
+          zone === "cyber" ? !spectator : autoCamera,
+        );
+        $("cam-toggle-btn").title =
           zone === "cyber"
-            ? spectator
-              ? "视角：观察"
-              : "视角：坦克"
-            : autoCamera
-              ? "自动镜头：开"
-              : "自动镜头：关";
+            ? tr("切换观察视角", "Toggle spectator")
+            : tr("自动镜头", "Auto camera");
+        $("sound-btn").querySelector("span").textContent = soundEnabled
+          ? "volume_up"
+          : "volume_off";
+        $("sound-btn").title = tr("声音开关", "Sound On/Off");
+        $("sound-btn").classList.toggle("active", soundEnabled);
+        $("jump-icon").textContent =
+          zone === "space" ? "rocket_launch" : "arrow_upward";
         $("hint").textContent =
           zone === "space"
-            ? "WASD / 方向键移动 · 按住空格飞行 · 拖动视角"
-            : "WASD / 方向键移动 · 空格跳跃 · 拖动视角";
+            ? tr(
+                "WASD 移动 • 空格 飞行 • 拖动 视角",
+                "WASD to Move • SPACE to Fly • Drag to Look",
+              )
+            : tr(
+                "WASD 移动 • 空格 跳跃 • 拖动 视角",
+                "WASD to Move • SPACE to Jump • Drag to Look",
+              );
       }
       function setScore(n) {
         const old = score;
@@ -1056,7 +1445,7 @@
               pos.z,
             ).project(camera);
           const el = document.createElement("div");
-          el.className = "scorepop";
+          el.className = "score-popup";
           el.textContent = (score > old ? "+" : "") + (score - old);
           if (score < old) el.style.color = "#ff8080";
           el.style.left = (projected.x * 0.5 + 0.5) * innerWidth + "px";
@@ -1069,17 +1458,19 @@
         if (newCp > oldCp) {
           checkpoint = newCp;
           playSound("lap");
-          toast("检查点 " + (checkpoint + 1) + " / 7");
-        } else toast((score > old ? "+" : "") + (score - old));
+          if (checkpoint < 6)
+            toast(tr(`第 ${checkpoint + 1} 圈`, `LAP ${checkpoint + 1}`));
+        }
         if (score >= 102) {
           running = false;
           music.pause();
-          if (best === null || elapsed < best) {
+          const newRecord = best === null || elapsed < best;
+          if (newRecord) {
             best = elapsed;
             setBest(zone, best);
           }
           $("win-text").textContent =
-            `${zones[zone].name} · 102 分 / 6 圈 · 用时 ${timeFmt(elapsed)} · 最佳 ${timeFmt(best)}`;
+            `${tr("用时: ", "Time: ")}${timeFmt(elapsed)}${newRecord ? ` (${tr("新纪录！", "New Record!")})` : ""}`;
           $("win").classList.remove("hidden");
         }
         updateHUD();
@@ -1214,7 +1605,9 @@
               : id === "snow"
                 ? "驾驶原冰雪坦克逆时针前进，完成 6 圈。"
                 : "驾驶对应原坦克，依次经过路径，完成 6 圈。";
-          $("start").textContent = state.finished ? "重新开始" : "开始 / 继续";
+          $("start").textContent = state.finished
+            ? tr("重新开始", "PLAY AGAIN")
+            : tr("点击开始", "TAP TO START");
           $("loading").classList.add("hidden");
           $("welcome").classList.remove("hidden");
           updateHUD();
@@ -1583,7 +1976,7 @@
         }
         renderer.render(scene, camera);
       }
-      $("start").onclick = () => {
+      $("start-prompt").onclick = () => {
         if (score >= 102) {
           resetRace();
           return;
@@ -1594,24 +1987,34 @@
         updateHUD();
       };
       $("replay").onclick = resetRace;
-      $("restart").onclick = () => {
-        if (confirm("确定重新开始当前场景？")) resetRace();
-      };
+      function askConfirm(message, action) {
+        $("confirm-text").textContent = message;
+        $("confirm-yes").textContent = tr("确定", "YES");
+        $("confirm-cancel").textContent = tr("取消", "NO");
+        $("confirm-modal").classList.remove("hidden");
+        $("confirm-yes").onclick = () => {
+          $("confirm-modal").classList.add("hidden");
+          action();
+        };
+        $("confirm-cancel").onclick = () =>
+          $("confirm-modal").classList.add("hidden");
+      }
+      $("restart").onclick = () =>
+        askConfirm(tr("确定重新开始？", "Restart Game?"), resetRace);
       $("respawn").onclick = () => respawn(true);
-      $("delete-best").onclick = () => {
-        if (confirm("删除此场景的最佳成绩？")) {
+      $("delete-best").onclick = () =>
+        askConfirm(tr("确定删除记录？", "Delete Best Record?"), () => {
           try {
             localStorage.removeItem("four-rapier-best-" + zone);
           } catch {}
           best = null;
           updateHUD();
-        }
-      };
+        });
       $("sound").onclick = () => {
         soundEnabled = !soundEnabled;
-        $("sound").textContent = "声音：" + (soundEnabled ? "开" : "关");
         if (soundEnabled && running) music.play().catch(() => {});
         else music.pause();
+        updateHUD();
       };
       $("camera").onclick = () => {
         if (zone === "cyber") {
@@ -1619,12 +2022,6 @@
           controls.enablePan = spectator;
         } else autoCamera = !autoCamera;
         updateHUD();
-      };
-      $("menu-toggle").onclick = () => {
-        const expanded = document
-          .querySelector(".hud")
-          .classList.toggle("expanded");
-        $("menu-toggle").textContent = expanded ? "设置 ▴" : "设置 ▾";
       };
       $("fullscreen").onclick = async () => {
         try {
@@ -1641,19 +2038,53 @@
           console.warn("Fullscreen unavailable", e);
         }
       };
+      document.addEventListener("click", (event) => {
+        if (
+          event.target.closest("#fullscreen") ||
+          document.fullscreenElement ||
+          !document.documentElement.requestFullscreen
+        )
+          return;
+        document.documentElement
+          .requestFullscreen()
+          .then(() => {
+            if (screen.orientation?.lock)
+              screen.orientation.lock("landscape").catch(() => {});
+          })
+          .catch(() => {});
+      });
       document.addEventListener("fullscreenchange", () => {
         $("fullscreen").textContent = document.fullscreenElement
-          ? "退出全屏"
-          : "全屏";
+          ? tr("退出全屏", "Exit full screen")
+          : tr("全屏", "Full screen");
       });
       $("about").onclick = () => {
-        $("help-title").textContent = zones[zone].name;
-        $("help-text").textContent =
-          zone === "space"
-            ? "长按空格飞行，轨道引力波会引导坦克；走完 6 圈获得 102 分。"
-            : zone === "snow"
-              ? "WASD 控制坦克，按空格跳跃。逆时针跳跃得分，后退扣分，远距离跳跃可得 2 分。"
-              : "依次驶向下一座平台 / 岛屿，完成 6 圈。WASD 移动，空格跳跃。";
+        const names = {
+          snow: tr(
+            "3D坦克和雪陷阱（玩法重构）",
+            "Tanki and The Snow Trap (Rework)",
+          ),
+          space: tr("太空中的坦克（玩法重构）", "Tanks in Space (Rework)"),
+          cyber: tr("赛博坦克", "CyberTank"),
+          halloween: tr("万圣节：糖果或捣蛋", "Halloween: Trick or Treat"),
+        };
+        $("help-title").textContent = names[zone];
+        $("help-text").innerHTML =
+          zone === "snow"
+            ? tr(
+                "使用摇杆或 WASD 移动。<br><strong>逆时针</strong>跳跃得分。<br>后退跳跃扣分。<br>连跳 = +2 分！",
+                "Use Joystick or WASD to move.<br><strong>Counter-Clockwise</strong> jumps score points.<br>Backward jumps deduct points.<br>Double jumps = +2 points!",
+              )
+            : zone === "space"
+              ? tr("使用摇杆或 WASD 移动。", "Use Joystick or WASD to move.")
+              : tr(
+                  "依次驶向下一座平台或岛屿，完成 6 圈。WASD 移动，空格跳跃。",
+                  "Drive to the next platform or island and complete 6 laps. WASD to move, SPACE to jump.",
+                );
+        $("about-tip").textContent = tr(
+          "提示：点击屏幕进入全屏",
+          "Tip: Tap screen to enter Fullscreen",
+        );
         $("help").classList.remove("hidden");
       };
       $("close-help").onclick = () => $("help").classList.add("hidden");
@@ -1737,7 +2168,7 @@
           mag = Math.max(rad, Math.hypot(dx, dy));
         joy.x = dx / mag;
         joy.y = dy / mag;
-        knob.style.transform = `translate(calc(-50% + ${joy.x * rad}px),calc(-50% + ${joy.y * rad}px)`;
+        knob.style.transform = `translate(calc(-50% + ${joy.x * rad}px),calc(-50% + ${joy.y * rad}px))`;
       }
       $("jump").onpointerdown = (e) => {
         e.preventDefault();
@@ -1752,6 +2183,39 @@
         camera.aspect = innerWidth / innerHeight;
         camera.updateProjectionMatrix();
       });
+
+      document.querySelector("[data-zone=cyber]").textContent = tr(
+        "赛博",
+        "Cyber",
+      );
+      document.querySelector("[data-zone=snow]").textContent = tr(
+        "冰雪",
+        "Snow",
+      );
+      document.querySelector("[data-zone=space]").textContent = tr(
+        "太空",
+        "Space",
+      );
+      document.querySelector("[data-zone=halloween]").textContent = tr(
+        "万圣节",
+        "Halloween",
+      );
+      if ("ontouchstart" in window || navigator.maxTouchPoints > 0)
+        $("touch-ui").classList.add("touch-enabled");
+      $("start-prompt").addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          $("start-prompt").click();
+        }
+      });
+      $("respawn").textContent = tr("检查点", "Checkpoint");
+      $("fullscreen").textContent = tr("全屏", "Full screen");
+      $("win-title").textContent = tr("恭喜通关！", "Challenge Completed!");
+      $("win-desc").textContent = tr(
+        "你已获得 102 分并完成了全部 6 圈挑战。",
+        "You've reached 102 points and finished all 6 laps.",
+      );
+      $("reset-btn-text").textContent = tr("再来一次", "PLAY AGAIN");
       animate();
       selectZone("cyber");
     </script>
