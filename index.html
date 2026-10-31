@@ -957,6 +957,37 @@
       controls.enablePan = false;
       controls.minPolarAngle = 0;
       controls.maxPolarAngle = Math.PI;
+      // Newer OrbitControls listen for pointermove/up on the whole document.
+      // Ignore fingers it did not acquire on the canvas: otherwise moving or
+      // releasing a joystick/button finger is mistaken for a camera gesture.
+      if (
+        typeof controls._isTrackingPointer === "function" &&
+        typeof controls._onPointerMove === "function" &&
+        typeof controls._onPointerUp === "function"
+      ) {
+        const move = controls._onPointerMove,
+          up = controls._onPointerUp;
+        renderer.domElement.removeEventListener("pointercancel", up);
+        controls._onPointerMove = (event) => {
+          if (controls._isTrackingPointer(event)) move(event);
+        };
+        controls._onPointerUp = (event) => {
+          if (controls._isTrackingPointer(event)) up(event);
+        };
+        renderer.domElement.addEventListener(
+          "pointercancel",
+          controls._onPointerUp,
+        );
+      }
+      let manualOrbitActive = false,
+        manualOrbitEnd = -Infinity;
+      controls.addEventListener("start", () => {
+        manualOrbitActive = true;
+      });
+      controls.addEventListener("end", () => {
+        manualOrbitActive = false;
+        manualOrbitEnd = performance.now();
+      });
       const amb = new THREE.AmbientLight(0xffffff, 1);
       scene.add(amb);
       const light = new THREE.DirectionalLight(0xffdfb0, 1.5);
@@ -2590,7 +2621,12 @@
             while (d > Math.PI) d -= 2 * Math.PI;
             while (d < -Math.PI) d += 2 * Math.PI;
             cameraPrevAngle = angle;
-            if (autoCamera && Math.abs(d) < 1) {
+            if (
+              autoCamera &&
+              !manualOrbitActive &&
+              performance.now() - manualOrbitEnd > 350 &&
+              Math.abs(d) < 1
+            ) {
               const offset = camera.position
                 .clone()
                 .sub(controls.target)
@@ -2765,15 +2801,94 @@
         }
         updateHUD();
       };
-      // The original UI enters full screen on interaction where supported.
-      document.addEventListener("click", () => {
-        if (
-          document.fullscreenElement ||
-          !document.documentElement.requestFullscreen
-        )
-          return;
-        // Do not lock the device to landscape: portrait is supported too.
-        document.documentElement.requestFullscreen().catch(() => {});
+      // Fullscreen and orientation APIs need a user gesture and may be
+      // restricted by the browser, platform or iframe. Keep the game usable
+      // if either request is denied, and allow a later tap to retry fullscreen.
+      let fullscreenPending = false,
+        landscapeAttempted = false,
+        fullscreenWarned = false;
+      function fullscreenUnavailable() {
+        if (!fullscreenWarned && matchMedia("(pointer: coarse)").matches) {
+          fullscreenWarned = true;
+          // This notice sits above loading/selection overlays too, so a failed
+          // first-gesture request is not hidden while assets are downloading.
+          const notice = document.createElement("div");
+          notice.textContent = tr(
+            "浏览器未允许全屏或锁定横屏，请手动旋转设备",
+            "Fullscreen or landscape lock unavailable; rotate your device manually",
+          );
+          notice.setAttribute("role", "status");
+          Object.assign(notice.style, {
+            position: "fixed",
+            zIndex: "1000",
+            top: "8px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "max-content",
+            maxWidth: "90vw",
+            boxSizing: "border-box",
+            padding: "9px 16px",
+            borderRadius: "18px",
+            background: "var(--md-sys-color-primary-container)",
+            color: "var(--md-sys-color-on-primary-container)",
+            fontSize: "13px",
+            textAlign: "center",
+            pointerEvents: "none",
+          });
+          document.body.appendChild(notice);
+          setTimeout(() => notice.remove(), 6000);
+        }
+      }
+      function withDisplayTimeout(promise) {
+        return new Promise((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error("Display request timed out")),
+            4000,
+          );
+          Promise.resolve(promise).then(
+            (value) => {
+              clearTimeout(timer);
+              resolve(value);
+            },
+            (error) => {
+              clearTimeout(timer);
+              reject(error);
+            },
+          );
+        });
+      }
+      async function enterFullscreenLandscape() {
+        if (fullscreenPending) return;
+        fullscreenPending = true;
+        try {
+          if (!document.fullscreenElement) {
+            if (document.documentElement.requestFullscreen)
+              await withDisplayTimeout(
+                document.documentElement.requestFullscreen(),
+              );
+            else fullscreenUnavailable();
+          }
+          if (!landscapeAttempted) {
+            landscapeAttempted = true;
+            if (
+              screen.orientation &&
+              typeof screen.orientation.lock === "function"
+            ) {
+              try {
+                await withDisplayTimeout(screen.orientation.lock("landscape"));
+              } catch {
+                fullscreenUnavailable();
+              }
+            } else fullscreenUnavailable();
+          }
+        } catch {
+          fullscreenUnavailable();
+        } finally {
+          fullscreenPending = false;
+        }
+      }
+      document.addEventListener("fullscreenchange", () => {
+        if (!document.fullscreenElement) landscapeAttempted = false;
       });
       $("about").onclick = () => {
         const names = {
@@ -2796,8 +2911,8 @@
                   "Drive to the next platform or island and complete 6 laps. WASD to move, SPACE to jump.",
                 );
         $("about-tip").textContent = tr(
-          "提示：点击屏幕进入全屏",
-          "Tip: Tap screen to enter Fullscreen",
+          "提示：点击屏幕进入全屏并锁定横屏（需浏览器支持）",
+          "Tip: Tap to enter fullscreen and lock landscape (browser support required)",
         );
         $("help").classList.remove("hidden");
       };
@@ -3040,6 +3155,9 @@
         },
         true,
       );
+      // Register after duplicate-touch suppression so a compatibility click
+      // cannot request fullscreen a second time for the same finger.
+      document.addEventListener("click", enterFullscreenLandscape, true);
       // Mobile browsers can deliver orientation, viewport and fullscreen
       // changes in separate phases. Anchor UI to the live viewport and resync
       // the camera/drawing buffer after those phases have settled.
@@ -3125,5 +3243,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a531de7f4b39609c',t:'MTc5MzQ0MTQxOA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a531de7f4b39609c',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a532b30ebeb93828',t:'MTc5MzQ1MDEyNA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a532b30ebeb93828',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
