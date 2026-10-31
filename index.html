@@ -304,10 +304,13 @@
           pointer-events: auto; transition: transform 0.1s, box-shadow 0.1s, background-color 0.2s;
           cursor: pointer; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       }
-      #jump-btn:active {
+      #jump-btn:active, #jump-btn.is-pressed {
           transform: scale(0.95); background-color: var(--md-sys-color-primary);
           color: var(--md-sys-color-on-primary); box-shadow: 0 3px 6px rgba(0,0,0,0.4);
       }
+
+      #jump-btn.is-pressed { transition: transform .1s, box-shadow .1s; }
+      button.touch-pressed:not(#jump-btn) { filter: brightness(1.3); }
 
       .desktop-hint {
           display: none; position: absolute; bottom: 32px; right: 32px;
@@ -914,7 +917,9 @@
         spaceAsteroids = [],
         beamTexture = null;
       const keyboard = { f: 0, t: 0, jump: false },
-        joy = { x: 0, y: 0 };
+        joy = { x: 0, y: 0 },
+        jumpPointers = new Set();
+      const jumpHeld = () => keyboard.jump || jumpPointers.size > 0;
       const states = {};
       let statusTimer;
       await RAPIER.init();
@@ -1793,6 +1798,7 @@
         }
         const hadPlayer = !!player,
           wasRunning = running;
+        resetTouchControls();
         loading = true;
         running = false;
         music.pause();
@@ -2165,7 +2171,7 @@
           vx = vel.x,
           vy = vel.y,
           vz = vel.z;
-        if (!spectator && keyboard.jump) {
+        if (!spectator && jumpHeld()) {
           target
             .set(1, 0, 0)
             .applyAxisAngle(v(0, 1, 0), player.yaw)
@@ -2261,7 +2267,7 @@
         let y = vel.y;
         let cyberImpulse = false;
         if (
-          keyboard.jump &&
+          jumpHeld() &&
           !jumpActive &&
           now - lastGrounded < (zone === "snow" ? 0.2 : 0.1)
         ) {
@@ -2271,8 +2277,8 @@
           playSound("jump");
           lastGrounded = -1e4;
         }
-        if (zone === "snow" && !keyboard.jump && jumpWasHeld && y > 0) y *= 0.5;
-        jumpWasHeld = keyboard.jump;
+        if (zone === "snow" && !jumpHeld() && jumpWasHeld && y > 0) y *= 0.5;
+        jumpWasHeld = jumpHeld();
         player.rigid.setLinvel({ x: horizontal.x, y, z: horizontal.z }, true);
         if (cyberImpulse)
           player.rigid.applyImpulse({ x: 0, y: 3500, z: 0 }, true);
@@ -2526,7 +2532,7 @@
         } else {
           keyboard.f = keyboard.t = 0;
           keyboard.jump = false;
-          joy.x = joy.y = 0;
+          resetTouchControls();
           $("touch-ui").classList.toggle("spectator-hidden", spectator);
           controls.enabled = !spectator;
           controls.enablePan = false;
@@ -2653,25 +2659,52 @@
             keyboard.jump = false;
         }
       });
+      // Touch buttons need independent pointer ownership. A finger on the
+      // joystick must not prevent a second/third finger operating another UI.
+      const stick = $("stick"),
+        knob = $("knob"),
+        jumpButton = $("jump");
+      let stickPointer = null;
+      function resetTouchControls() {
+        const oldStick = stickPointer;
+        stickPointer = null;
+        const oldJumps = [...jumpPointers];
+        jumpPointers.clear();
+        joy.x = joy.y = 0;
+        knob.style.transform = "translate(-50%,-50%)";
+        jumpButton.classList.remove("is-pressed");
+        if (oldStick !== null && stick.hasPointerCapture(oldStick))
+          stick.releasePointerCapture(oldStick);
+        for (const id of oldJumps)
+          if (jumpButton.hasPointerCapture(id))
+            jumpButton.releasePointerCapture(id);
+      }
       window.addEventListener("blur", () => {
         keyboard.f = keyboard.t = 0;
         keyboard.jump = false;
-        joy.x = joy.y = 0;
+        resetTouchControls();
+        clearUITouches();
       });
-      const stick = $("stick"),
-        knob = $("knob");
       stick.onpointerdown = (e) => {
+        if (stickPointer !== null) return;
         e.preventDefault();
+        stickPointer = e.pointerId;
         stick.setPointerCapture(e.pointerId);
         moveStick(e);
       };
       stick.onpointermove = (e) => {
-        if (stick.hasPointerCapture(e.pointerId)) moveStick(e);
+        if (e.pointerId === stickPointer) moveStick(e);
       };
-      stick.onpointerup = stick.onpointercancel = () => {
+      function releaseStick(e) {
+        if (e.pointerId !== stickPointer) return;
+        stickPointer = null;
         joy.x = joy.y = 0;
         knob.style.transform = "translate(-50%,-50%)";
-      };
+      }
+      stick.onpointerup =
+        stick.onpointercancel =
+        stick.onlostpointercapture =
+          releaseStick;
       function moveStick(e) {
         const r = stick.getBoundingClientRect(),
           rad = r.width * 0.38,
@@ -2682,13 +2715,123 @@
         joy.y = dy / mag;
         knob.style.transform = `translate(calc(-50% + ${joy.x * rad}px),calc(-50% + ${joy.y * rad}px))`;
       }
-      $("jump").onpointerdown = (e) => {
+      jumpButton.onpointerdown = (e) => {
         e.preventDefault();
-        $("jump").setPointerCapture(e.pointerId);
-        keyboard.jump = true;
+        jumpPointers.add(e.pointerId);
+        jumpButton.classList.add("is-pressed");
+        jumpButton.setPointerCapture(e.pointerId);
       };
-      $("jump").onpointerup = $("jump").onpointercancel = () =>
-        (keyboard.jump = false);
+      function releaseJump(e) {
+        jumpPointers.delete(e.pointerId);
+        jumpButton.classList.toggle("is-pressed", jumpPointers.size > 0);
+      }
+      jumpButton.onpointerup =
+        jumpButton.onpointercancel =
+        jumpButton.onlostpointercapture =
+          releaseJump;
+
+      // Browsers may omit compatibility clicks for non-primary touch pointers.
+      // Activate each UI button on that finger's release, and swallow only its
+      // matching native touch click so it cannot fire twice. Mouse and keyboard
+      // clicks keep their normal path and semantics.
+      const uiTouches = new Map(),
+        recentTouchClicks = [];
+      let lastNonTouchDown = -Infinity;
+      function clearUITouches() {
+        for (const item of uiTouches.values())
+          item.target.classList.remove("touch-pressed");
+        uiTouches.clear();
+        recentTouchClicks.length = 0;
+      }
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) return;
+        keyboard.f = keyboard.t = 0;
+        keyboard.jump = false;
+        resetTouchControls();
+        clearUITouches();
+      });
+      document.addEventListener(
+        "pointerdown",
+        (e) => {
+          if (e.pointerType !== "touch") {
+            lastNonTouchDown = performance.now();
+            return;
+          }
+          const target = e.target.closest("button, #start-prompt");
+          if (!target || target === jumpButton || target.disabled) return;
+          uiTouches.set(e.pointerId, { target });
+          target.classList.add("touch-pressed");
+        },
+        true,
+      );
+      function finishUITouch(e, cancelled) {
+        const item = uiTouches.get(e.pointerId);
+        if (!item) return;
+        uiTouches.delete(e.pointerId);
+        if (
+          ![...uiTouches.values()].some((other) => other.target === item.target)
+        )
+          item.target.classList.remove("touch-pressed");
+        if (cancelled || !item.target.isConnected || item.target.disabled)
+          return;
+        const hit = document.elementFromPoint(e.clientX, e.clientY);
+        if (!hit || !item.target.contains(hit)) return;
+        const now = performance.now();
+        while (
+          recentTouchClicks.length &&
+          now - recentTouchClicks[0].time > 1000
+        )
+          recentTouchClicks.shift();
+        recentTouchClicks.push({
+          target: item.target,
+          pointerId: e.pointerId,
+          time: now,
+        });
+        item.target.click();
+      }
+      document.addEventListener(
+        "pointerup",
+        (e) => finishUITouch(e, false),
+        true,
+      );
+      document.addEventListener(
+        "pointercancel",
+        (e) => finishUITouch(e, true),
+        true,
+      );
+      document.addEventListener(
+        "click",
+        (e) => {
+          if (!e.isTrusted || e.detail === 0) return;
+          const explicitTouch =
+            e.pointerType === "touch" ||
+            e.sourceCapabilities?.firesTouchEvents === true;
+          // Older Safari may report a trusted touch click as a plain MouseEvent.
+          const noTouchInfo =
+            !e.pointerType && e.sourceCapabilities?.firesTouchEvents == null;
+          if (!explicitTouch && !noTouchInfo) return;
+          const now = performance.now();
+          for (let i = recentTouchClicks.length - 1; i >= 0; i--) {
+            const item = recentTouchClicks[i];
+            if (now - item.time > 1000) {
+              recentTouchClicks.splice(i, 1);
+              continue;
+            }
+            if (
+              (!noTouchInfo || lastNonTouchDown < item.time) &&
+              (e.pointerId > 0
+                ? e.pointerId === item.pointerId
+                : item.target.contains(e.target))
+            ) {
+              recentTouchClicks.splice(i, 1);
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              return;
+            }
+          }
+        },
+        true,
+      );
       window.addEventListener("resize", () => {
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(innerWidth, innerHeight);
@@ -2734,5 +2877,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  </body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5315b95b960a9c6',t:'MTc5MzQzNjA1NQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5315b95b960a9c6',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
