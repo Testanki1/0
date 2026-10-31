@@ -276,6 +276,27 @@
 
       .modal-title { font-size: 1.5rem; font-weight: 700; margin-bottom: 8px; }
       .modal-desc { font-size: 0.875rem; color: rgba(255,255,255,0.7); margin-bottom: 24px; line-height: 1.5; }
+      /* Unofficial notice (start screen + about panel) */
+      .unofficial-note {
+        margin: 18px auto 0;
+        max-width: 22rem;
+        padding: 0 20px;
+        font-size: 0.6875rem;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.55);
+        text-align: center;
+        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+      }
+      .unofficial-note .en { display: block; opacity: 0.85; font-style: italic; }
+      .unofficial-note .src { display: block; margin-top: 4px; opacity: 0.6; }
+      .unofficial-note.in-modal {
+        margin: 16px 0 0;
+        padding: 10px 0 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        font-size: 0.6875rem;
+        text-align: left;
+        text-shadow: none;
+      }
 
       .close-btn {
           position: absolute; top: 16px; right: 16px; padding: 8px;
@@ -678,6 +699,16 @@
         </div>
         <div id="welcome-title" hidden></div>
         <div id="welcome-desc" hidden></div>
+        <p id="welcome-unofficial" class="unofficial-note">
+          <span class="zh"
+            >本内容与《3D坦克》（Tanki Online）官方无关，由玩家制作。</span
+          >
+          <span class="en"
+            >"This content is not affiliated with Tanki Online and was created
+            by fans."</span
+          >
+          <span class="src">— Tanki Online Wiki · Fan Content Guidelines</span>
+        </p>
       </div>
 
       <!-- Custom Confirmation Modal -->
@@ -789,6 +820,16 @@
           <div id="about-tip" class="score-range" style="margin-top: 16px">
             Tip: Tap screen to enter Fullscreen
           </div>
+          <p id="about-unofficial" class="unofficial-note in-modal">
+            <span class="zh"
+              >非官方粉丝作品，与《3D坦克》（Tanki Online）官方无关；游戏素材版权归
+              Alternativa Game Ltd. 所有。</span
+            >
+            <span class="en"
+              >"This content is not affiliated with Tanki Online and was created
+              by fans." All in-game assets © Alternativa Game Ltd.</span
+            >
+          </p>
         </div>
       </div>
 
@@ -3599,6 +3640,12 @@
       $("world-menu-toggle").title = tr("选择场景", "Choose scene");
       $("load-retry").textContent = tr("重试", "Retry");
       $("load-back").textContent = tr("返回", "Back");
+      document.querySelectorAll(".unofficial-note .zh").forEach((n) => {
+        n.hidden = !isZh;
+      });
+      document.querySelectorAll(".unofficial-note .en").forEach((n) => {
+        n.hidden = isZh;
+      });
       animate();
     </script>
   </body>
