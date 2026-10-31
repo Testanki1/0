@@ -877,7 +877,7 @@
         cyber: {
           name: "赛博坦克",
           origin: v(1200, 0, 0),
-          gravity: -20,
+          gravity: -25,
           camera: [8, 70, 28],
           movement: "cyber",
         },
@@ -2606,7 +2606,7 @@
           );
           moving = joystickMove = true;
         } else {
-          player.yaw += (spectator ? 0 : keyboard.t) * 2 * dt;
+          player.yaw += (spectator ? 0 : keyboard.t) * 4 * dt;
           if (!spectator && keyboard.f) {
             moving = true;
             pitchDirection = Math.sign(keyboard.f);
@@ -2623,7 +2623,24 @@
           const currentRotation = new THREE.Quaternion().setFromEuler(
             new THREE.Euler(player.roll, player.yaw, player.pitch, "YZX"),
           );
-          currentRotation.rotateTowards(desiredRotation, 2 * dt);
+          // Keep vertical pitch gradual, but turn faster around the camera's
+          // screen-up axis, even when that camera is tilted or upside down.
+          // Interpolate the full quaternion to preserve diagonal orientation.
+          const delta = desiredRotation
+              .clone()
+              .multiply(currentRotation.clone().invert()),
+            axisLength = Math.hypot(delta.x, delta.y, delta.z),
+            screenUp = v(0, 1, 0).applyQuaternion(camera.quaternion),
+            yawShare =
+              axisLength > 1e-8
+                ? Math.abs(
+                    delta.x * screenUp.x +
+                      delta.y * screenUp.y +
+                      delta.z * screenUp.z,
+                  ) / axisLength
+                : 0,
+            turnSpeed = 2 + 2 * Math.min(1, yawShare);
+          currentRotation.rotateTowards(desiredRotation, turnSpeed * dt);
           const angles = new THREE.Euler().setFromQuaternion(
             currentRotation,
             "YZX",
@@ -2702,25 +2719,9 @@
               .multiplyScalar(Math.min(d * 2.5, 6));
           const final = forward.multiplyScalar(2).add(pull).add(target),
             factor = Math.min(1, 4 * dt);
-          // Keep lateral route assist, but never let it overpower and reverse
-          // the player's intended horizontal movement while driving.
-          if (moving) {
-            const horizontalSq = target.x * target.x + target.z * target.z;
-            if (horizontalSq > 1e-10) {
-              const projection =
-                ((final.x - target.x) * target.x +
-                  (final.z - target.z) * target.z) /
-                horizontalSq;
-              if (projection < 0) {
-                final.x -= projection * target.x;
-                final.z -= projection * target.z;
-              }
-            } else {
-              final.x = 0;
-              final.z = 0;
-            }
-            final.y = target.y;
-          }
+          // The track's attraction must also act while moving. Replacing its
+          // vertical component or cancelling its opposing horizontal component
+          // let ordinary movement escape without the flight button.
           vx += (final.x - vx) * factor;
           vy += (final.y - vy) * factor;
           vz += (final.z - vz) * factor;
@@ -2751,7 +2752,7 @@
             target.addScaledVector(cf, -joy.y).addScaledVector(right, joy.x);
             if (target.lengthSq() > 0.01) {
               moving = true;
-              target.normalize().multiplyScalar(25);
+              target.normalize().multiplyScalar(30);
               const desired = Math.atan2(target.x, target.z);
               let turn = desired - player.yaw;
               while (turn > Math.PI) turn -= 2 * Math.PI;
@@ -2765,7 +2766,7 @@
               target
                 .set(0, 0, 1)
                 .applyAxisAngle(v(0, 1, 0), player.yaw)
-                .multiplyScalar(keyboard.f * 25);
+                .multiplyScalar(keyboard.f * 30);
             }
           }
         } else if (Math.abs(joy.x) > 0.01 || Math.abs(joy.y) > 0.01) {
@@ -3600,5 +3601,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a533c6ce5dd6dc9c',t:'MTc5MzQ2MTQxOQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a533c6ce5dd6dc9c',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  </body>
 </html>
