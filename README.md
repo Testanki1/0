@@ -57,9 +57,29 @@
 2. **素材层面同源**：模型、环境图、天空图与音乐取自官方活动站使用的同一批素材。这是本项目唯一需要留意的部分。
 3. 本项目为非官方同人作品，无广告、无收费、无付费墙，不在游戏内或官方社群宣传链接；如官方有任何异议，收到通知后会立即下线或删除相关内容。
 
+## 引用来源
+
+| 文档 | 链接 |
+| --- | --- |
+| 《赛博坦克》官方活动站（国际服） | <https://pages.tankionline.com/summer-game/> |
+| 《赛博坦克》官方活动站（国服） | <https://pages.3dtank.com/summer-game/> |
+| 《3D坦克与雪陷阱》官方活动站 | <https://new-year.tankionline.com/> |
+| 《太空中的坦克》官方活动站 | <https://darkmatter.tankionline.com/> |
+| 《不给糖就捣蛋》官方活动站（国际服） | <https://pages.tankionline.com/halloween> |
+| 《不给糖就捣蛋》官方活动站（国服） | <https://pages.3dtank.com/halloween> |
+| 《粉丝内容创作指南》（中文，声明出处） | <https://wiki.3dtank.net/粉丝内容创作指南> |
+| 《Fan Content Guidelines》（英文，声明出处） | <https://en.tankiwiki.com/Creating_Fan_Content_Guide> |
+
+说明：
+
+- 官方活动站为限时站点，链接可能随活动结束失效。
+- 引文为原文摘录，版权归原权利方；本文件对官方内容的使用属于评论与说明性质。
+
 ---
 
 # English version
+
+
 
 A browser-based 3D mini-game built with **Three.js + Rapier (WebAssembly physics)**. It takes the scenes from past Tanki Online event mini-games and turns them into a free-roam parkour course: drive, jump, chase the clock. No backend, no accounts, no ads — the only thing stored is your best time, in `localStorage`.
 
@@ -114,18 +134,20 @@ Each scene is taken from a separate official event website. These sites are re-r
 
 ---
 
-## 引用来源 / Sources
+## Sources
 
-| 文档 | 链接 |
+| Document | Link |
 | --- | --- |
-| Cybertank 官方活动站（国际服 / 国服） | <https://pages.tankionline.com/summer-game/> · <https://pages.3dtank.com/summer-game/> |
-| Tanki and The Snow Trap 官方活动站 | <https://new-year.tankionline.com/> |
-| Tanks in Space 官方活动站 | <https://darkmatter.tankionline.com/> |
-| Trick-or-Treat 官方活动站（国际服 / 国服） | <https://pages.tankionline.com/halloween> · <https://pages.3dtank.com/halloween> |
-| Fan Content Guidelines（EN，声明出处） | <https://en.tankiwiki.com/Creating_Fan_Content_Guide> |
-| 粉丝内容创作指南（中文，声明出处） | <https://wiki.3dtank.net/粉丝内容创作指南> |
+| CyberTank official event site (international) | <https://pages.tankionline.com/summer-game/> |
+| CyberTank official event site (Chinese server) | <https://pages.3dtank.com/summer-game/> |
+| Snow Trap official event site | <https://new-year.tankionline.com/> |
+| Tanks in Space official event site | <https://darkmatter.tankionline.com/> |
+| Trick-or-Treat official event site (international) | <https://pages.tankionline.com/halloween> |
+| Trick-or-Treat official event site (Chinese server) | <https://pages.3dtank.com/halloween> |
+| Fan Content Guidelines (English, wording source) | <https://en.tankiwiki.com/Creating_Fan_Content_Guide> |
+| 粉丝内容创作指南 (Chinese, wording source) | <https://wiki.3dtank.net/粉丝内容创作指南> |
 
-说明：
+Notes:
 
-- 官方活动站为限时站点，链接可能随活动结束失效；本项目对应的素材路径以其当时的资源目录为准。
-- 引文为原文摘录，版权归原权利方；本文件对官方内容的使用属于评论与说明性质。
+- The official event sites are live only for the duration of an event, so the links may stop working once it ends.
+- Quoted lines are excerpts and remain the property of their rights holders. Their use here is commentary and attribution.
