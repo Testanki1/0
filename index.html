@@ -1365,6 +1365,18 @@
       const activeEffects = new Set();
       music.loop = true;
       music.volume = 0.4;
+      // 兜底：若 loop 属性在某些浏览器/格式下不生效或留下间隙，
+      // 在音轨结束后从开头重新播放，保证背景音乐无缝重复。
+      music.addEventListener(
+        "ended",
+        () => {
+          music.currentTime = 0;
+          if (running && soundEnabled && !document.hidden) {
+            music.play().catch(() => {});
+          }
+        },
+        { once: false },
+      );
       function pauseThemeAudio(stopEffects = true) {
         music.pause();
         if (ambientAudio) ambientAudio.pause();
@@ -1384,6 +1396,16 @@
         music = new Audio(paths.music);
         music.loop = true;
         music.volume = 0.4;
+        music.addEventListener(
+          "ended",
+          () => {
+            music.currentTime = 0;
+            if (running && soundEnabled && !document.hidden) {
+              music.play().catch(() => {});
+            }
+          },
+          { once: false },
+        );
         ambientAudio = paths.ambient ? new Audio(paths.ambient) : null;
         if (ambientAudio) {
           ambientAudio.loop = true;
@@ -2460,6 +2482,13 @@
           fromViewYaw = camera.rotation.y,
           toViewYaw = Math.atan2(-forward.x, -forward.z);
         respawn(true, true);
+        // 掉出重生时中断所有还在播放的音效（尤其是跳跃/滚动声），
+        // 避免音效在坦克已经掉出去之后还继续播放。
+        for (const effect of activeEffects) {
+          effect.pause();
+          effect.currentTime = 0;
+        }
+        activeEffects.clear();
         // Cyber faces local +Z; the other three tanks face local +X.
         player.yaw =
           zone === "cyber"
