@@ -1018,6 +1018,11 @@
         hdrLoader = new RGBELoader(),
         exrLoader = new EXRLoader();
       const cdn = "https://web-cdn.tankionline.com/";
+      // The tank is level at the initial elevated view. Keep this same
+      // camera-to-tank angle as the reference for space flight pitch.
+      const spaceCameraHorizontal = Math.hypot(1, 2),
+        spaceCameraHeight = 1.2,
+        spaceNeutralViewPitch = Math.atan2(-spaceCameraHeight, spaceCameraHorizontal);
       let activeTracker = null;
       function createTracker() {
         const tracker = { items: [], lastUpdate: 0 };
@@ -2076,7 +2081,7 @@
           } else if (id === "snow") {
             initialOffset = v(-40, 35, 0);
           } else if (id === "space") {
-            initialOffset = v(-Math.hypot(1, 2), 1.2, 0);
+            initialOffset = v(-spaceCameraHorizontal, spaceCameraHeight, 0);
           } else {
             initialOffset = v(-Math.hypot(dist * 0.6, dist), dist * 0.65, 0);
           }
@@ -2432,8 +2437,10 @@
           const view = v();
           camera.getWorldDirection(view);
           const cameraPitch = Math.atan2(view.y, Math.hypot(view.x, view.z));
-          // Thrust always overrides normal movement and pushes forward.
-          const targetPitch = cameraPitch * (thrusting ? 1 : pitchDirection);
+          const viewChange = cameraPitch - spaceNeutralViewPitch;
+          // Preserve the initial camera-to-tank angle, rather than aiming the
+          // nose directly along the camera. Thrust always pushes forward.
+          const targetPitch = viewChange * (thrusting ? 1 : pitchDirection);
           const pitchStep = 2 * dt;
           const difference = targetPitch - player.pitch;
           player.pitch += Math.max(-pitchStep, Math.min(pitchStep, difference));
@@ -3330,5 +3337,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5334d202f82718b',t:'MTc5MzQ1NjQzNQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5334d202f82718b',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5335b334d87718b',t:'MTc5MzQ1NzAxMQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5335b334d87718b',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
