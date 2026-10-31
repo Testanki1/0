@@ -813,6 +813,8 @@
         best = null,
         scoreAnchor = null,
         jumpWasHeld = false,
+        jumpActive = false,
+        respawnAnim = null,
         lastGrounded = -1e4,
         cameraPrevAngle = 0,
         spaceTrack = [],
@@ -1045,7 +1047,7 @@
         makePlayer(
           "cyber",
           tank.scene,
-          z.origin.clone().add(v(0, 8, 0)),
+          z.origin.clone().add(v(0, 2, 0)),
           collider,
         );
         z.nodes = [
@@ -1343,7 +1345,7 @@
         mesh.scale.setScalar(0.0004);
         const model = new THREE.Group();
         const visualRotation = new THREE.Group();
-        visualRotation.rotation.y = -Math.PI / 2; // Turn only the visual model 90° left.
+        visualRotation.rotation.y = Math.PI / 2; // Corrected 90° visual rotation (no collider rotation).
         visualRotation.add(mesh);
         model.add(visualRotation);
         makePlayer(
@@ -1531,6 +1533,7 @@
         if (loading || !zones[id]) return;
         if (player && id === zone) return;
         loading = true;
+        respawnAnim = null;
         saveState();
         zone = id;
         player = null;
@@ -1630,8 +1633,12 @@
         }
         return player.spawn.clone();
       }
-      function respawn(rollBack = true) {
+      function respawn(rollBack = true, silent = false) {
         if (!player) return;
+        if (!silent) {
+          respawnAnim = null;
+          player.mesh.visible = true;
+        }
         if (rollBack) score = Math.min(102, checkpoint * 17);
         const p = spawnForCheckpoint();
         player.rigid.setTranslation(p, true);
@@ -1643,20 +1650,46 @@
           p.x - zones[zone].origin.x,
           p.z - zones[zone].origin.z,
         );
-        controls.target.copy(p);
-        camera.position
-          .copy(p)
-          .add(
-            v(
-              zone === "space" ? 4 : 20,
-              zone === "space" ? 4 : 20,
-              zone === "space" ? 5 : 30,
-            ),
-          );
-        controls.update();
+        if (!silent) {
+          controls.target.copy(p);
+          camera.position
+            .copy(p)
+            .add(
+              v(
+                zone === "space" ? 4 : 20,
+                zone === "space" ? 4 : 20,
+                zone === "space" ? 5 : 30,
+              ),
+            );
+          controls.update();
+        }
         lastGrounded = -1e4;
         jumpWasHeld = false;
+        jumpActive = false;
         updateHUD();
+      }
+      // Like the original Snow Trap / Space reworks: return the camera smoothly to
+      // the checkpoint over 1.5 seconds while the reset tank is hidden.
+      function triggerRespawn() {
+        if (!player || respawnAnim) return;
+        const fromPos = camera.position.clone(),
+          fromTarget = controls.target.clone();
+        const offset = fromPos.clone().sub(fromTarget);
+        respawn(true, true);
+        const spawn = spawnForCheckpoint();
+        const endTarget = spawn.clone();
+        if (zone === "snow") endTarget.y = zones.snow.origin.y + 10;
+        if (zone === "space") endTarget.y -= 5;
+        const distance = Math.hypot(offset.x, offset.z);
+        const endPos = endTarget.clone().add(v(-distance, offset.y, 0));
+        respawnAnim = {
+          fromPos,
+          fromTarget,
+          endPos,
+          endTarget,
+          start: performance.now(),
+        };
+        player.mesh.visible = false;
       }
       function resetRace() {
         score = 0;
@@ -1677,7 +1710,7 @@
             zone === "snow"
               ? 2.4
               : zone === "cyber"
-                ? 1.8
+                ? 1.5
                 : zone === "halloween"
                   ? 1.1
                   : 0.5;
@@ -1728,15 +1761,22 @@
           }
           if (min <= 4 && bestN) setScore(Math.max(0, bestN.m - 1));
         } else {
-          const n = zones[zone].nodes[(score + 1) % 17],
-            radius = zone === "cyber" ? 13 : 2.5,
-            dy = zone === "cyber" ? 17 : 4;
-          if (
-            n &&
-            Math.hypot(p.x - n.x, p.z - n.z) < radius &&
-            Math.abs(p.y - n.y) < dy
-          )
-            setScore(score + 1);
+          const nodes = zones[zone].nodes;
+          const radius = zone === "cyber" ? 13 : 2.5;
+          const dy = zone === "cyber" ? 17 : 4;
+          // Check a forward arc of the circular track. A bounded arc avoids
+          // confusing a short backward move with an entire new lap.
+          let advance = 0,
+            nearest = Infinity;
+          for (let step = 1; step <= Math.min(8, 102 - score); step++) {
+            const n = nodes[(score + step) % 17];
+            const d = Math.hypot(p.x - n.x, p.z - n.z);
+            if (d < radius && Math.abs(p.y - n.y) < dy && d < nearest) {
+              nearest = d;
+              advance = step;
+            }
+          }
+          if (advance) setScore(score + advance);
         }
       }
       function spaceMotion(dt, p) {
@@ -1823,7 +1863,7 @@
           vy *= 0.98;
         }
         player.rigid.setLinvel({ x: vx, y: vy, z: vz }, true);
-        if (closest > 2500) respawn(true);
+        if (closest > 2500) triggerRespawn();
       }
       function groundMotion(dt, p, grounded, now) {
         let vel = player.rigid.linvel(),
@@ -1841,8 +1881,13 @@
           if (target.lengthSq() > 0.01) {
             moving = true;
             target.normalize().multiplyScalar(25);
-            player.yaw = Math.atan2(target.x, target.z);
           }
+          const look = moving ? target : cf;
+          const desired = Math.atan2(look.x, look.z);
+          let turn = desired - player.yaw;
+          while (turn > Math.PI) turn -= 2 * Math.PI;
+          while (turn < -Math.PI) turn += 2 * Math.PI;
+          player.yaw += turn * (1 - Math.pow(1 - 0.1, dt * 60));
         } else if (Math.abs(joy.x) > 0.01 || Math.abs(joy.y) > 0.01) {
           let cd = v();
           camera.getWorldDirection(cd);
@@ -1877,20 +1922,27 @@
               : Math.min(1, (moving ? 3 : 1) * dt),
           horizontal = v(vel.x, 0, vel.z).lerp(moving ? target : v(), k);
         if (grounded) lastGrounded = now;
+        // Re-arm after landing instead of requiring the button to be released.
+        if (grounded && vel.y <= 0) jumpActive = false;
         let y = vel.y;
+        let cyberImpulse = false;
         if (
           keyboard.jump &&
-          !jumpWasHeld &&
+          !jumpActive &&
           now - lastGrounded < (zone === "snow" ? 0.2 : 0.1)
         ) {
-          y = zone === "snow" ? 60 : zone === "cyber" ? 29 : 7;
+          jumpActive = true;
+          if (zone === "cyber") cyberImpulse = true;
+          else y = zone === "snow" ? 60 : 7;
           playSound("jump");
           lastGrounded = -1e4;
         }
         if (zone === "snow" && !keyboard.jump && jumpWasHeld && y > 0) y *= 0.5;
         jumpWasHeld = keyboard.jump;
         player.rigid.setLinvel({ x: horizontal.x, y, z: horizontal.z }, true);
-        if (p.y < -120) respawn(true);
+        if (cyberImpulse)
+          player.rigid.applyImpulse({ x: 0, y: 2500, z: 0 }, true);
+        if (p.y < (zone === "snow" ? -50 : -120)) triggerRespawn();
       }
       const clock = new THREE.Clock();
       function animate() {
@@ -1911,6 +1963,30 @@
             a.body.setNextKinematicRotation(a.mesh.quaternion);
           }
         if (player) {
+          if (respawnAnim) {
+            if (running && !document.hidden) elapsed += actualDelta;
+            let t = Math.min(1, (wall - respawnAnim.start) / 1500);
+            const ease =
+              t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            camera.position.lerpVectors(
+              respawnAnim.fromPos,
+              respawnAnim.endPos,
+              ease,
+            );
+            controls.target.lerpVectors(
+              respawnAnim.fromTarget,
+              respawnAnim.endTarget,
+              ease,
+            );
+            controls.update();
+            if (t >= 1) {
+              player.mesh.visible = true;
+              respawnAnim = null;
+            }
+            updateHUD();
+            renderer.render(scene, camera);
+            return;
+          }
           world.timestep = dt || 1 / 60;
           if (running) world.step();
           let position = player.rigid.translation(),
@@ -1921,6 +1997,10 @@
             if (zone === "space") spaceMotion(dt, p);
             else if (!(zone === "cyber" && spectator))
               groundMotion(dt, p, grounded, now);
+            if (respawnAnim) {
+              renderer.render(scene, camera);
+              return;
+            }
             scoreUpdate(p, grounded);
           }
           player.mesh.position.copy(p);
