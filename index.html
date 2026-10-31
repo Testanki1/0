@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
     />
     <meta name="theme-color" content="#001926" />
-    <title>坦克四界 · 融合世界</title>
+    <title>3D坦克迷你游戏•平台跳跃重构</title>
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0"
@@ -182,6 +182,19 @@
           font-size: 11px; font-weight: 500; opacity: 0.7;
           text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2px;
       }
+
+      .checkpoint-inline {
+          width: 30px; height: 30px; flex: 0 0 30px;
+          border: 1px solid rgba(255,255,255,.12); border-radius: 50%;
+          background: var(--md-sys-color-primary-container);
+          color: var(--md-sys-color-on-primary-container);
+          display: inline-flex; align-items: center; justify-content: center;
+          padding: 0; cursor: pointer; transition: background-color .2s, transform .2s;
+      }
+      .checkpoint-inline:hover { background-color: var(--md-sys-color-surface-variant); }
+      .checkpoint-inline:active { transform: scale(.94); }
+      .checkpoint-inline:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+      .checkpoint-inline .material-symbols-rounded { font-size: 18px; }
 
       .score-container { display: flex; align-items: baseline; gap: 8px; }
 
@@ -547,6 +560,14 @@
                     >refresh</span
                   >
                 </button>
+                <button
+                  id="respawn"
+                  class="checkpoint-inline"
+                  title="Checkpoint"
+                  aria-label="Checkpoint"
+                >
+                  <span class="material-symbols-rounded">flag</span>
+                </button>
               </div>
               <div
                 id="hud-best-container"
@@ -598,14 +619,6 @@
 
         <!-- Controls -->
         <div class="controls-row">
-          <button
-            id="respawn"
-            class="m3-btn-icon"
-            title="Checkpoint"
-            aria-label="Checkpoint"
-          >
-            <span class="material-symbols-rounded">flag</span>
-          </button>
           <button
             id="spectator-toggle"
             class="m3-btn-icon"
@@ -2401,7 +2414,14 @@
       }
       $("restart").onclick = () =>
         askConfirm(tr("确定重新开始？", "Restart Game?"), resetRace);
-      $("respawn").onclick = () => respawn(true);
+      $("respawn").onclick = () =>
+        askConfirm(
+          tr(
+            "确定返回检查点？当前圈的进度将被重置。",
+            "Return to the checkpoint? Progress in the current lap will be reset.",
+          ),
+          () => respawn(true),
+        );
       $("delete-best").onclick = () =>
         askConfirm(tr("确定删除记录？", "Delete Best Record?"), () => {
           try {
@@ -2714,5 +2734,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5312d060a3d1153',t:'MTc5MzQzNDE0OA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5312d060a3d1153',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  </body>
 </html>
