@@ -480,7 +480,7 @@
         <div id="world-menu" class="m3-card compact hidden">
           <div class="world-tabs">
             <button data-zone="cyber">赛博坦克</button
-            ><button data-zone="space">航天日</button
+            ><button data-zone="space">太空中的坦克</button
             ><button data-zone="halloween">不给糖就捣蛋</button
             ><button data-zone="snow">3D坦克和雪陷阱</button>
           </div>
@@ -501,7 +501,7 @@
             <button class="m3-btn-primary" data-initial-zone="cyber" disabled>
               赛博坦克</button
             ><button class="m3-btn-primary" data-initial-zone="space" disabled>
-              航天日</button
+              太空中的坦克</button
             ><button
               class="m3-btn-primary"
               data-initial-zone="halloween"
@@ -881,7 +881,7 @@
           movement: "snow",
         },
         space: {
-          name: "航天日",
+          name: "太空中的坦克",
           origin: v(0, 0, 0),
           gravity: 0,
           camera: [1, 8, 3],
@@ -915,6 +915,7 @@
         cameraPrevAngle = 0,
         spaceTrack = [],
         spaceAsteroids = [],
+        spaceInstances = [],
         beamTexture = null;
       const keyboard = { f: 0, t: 0, jump: false },
         joy = { x: 0, y: 0 },
@@ -1477,48 +1478,127 @@
           z.group.add(group);
           addTerrain(group);
         }
-        let astAngle = 0;
-        for (let e = 1; e <= 120; e++) {
-          const a = Math.max(1, 0.8 * Math.sqrt(e + 1.6));
-          astAngle += 2 * Math.asin(1 / a);
-          const x = a * Math.cos(astAngle) * 5.7,
-            y = a * Math.sin(astAngle) * 5.7 + 3.5,
-            zz = -14 * a + 15.8 + 0.3 * astAngle,
-            type = Math.random() > 0.5 ? "asteroid1" : "asteroid2",
-            scale = 2 * Math.random() + 1,
-            group = safeMesh(models[type], scale);
-          group.position.set(x, y, zz);
-          group.rotation.set(0, (89 * -Math.PI) / e, 0);
-          z.group.add(group);
-          const verts = [];
-          group.children.forEach((child) => {
-            if (child.isMesh) {
-              child.updateMatrix();
-              const p = child.geometry.attributes.position,
-                q = v();
-              for (let i = 0; i < p.count; i++) {
-                q.fromBufferAttribute(p, i).applyMatrix4(child.matrix);
-                verts.push(q.x, q.y, q.z);
-              }
-            }
-          });
-          const c =
-              RAPIER.ColliderDesc.convexHull(new Float32Array(verts)) ||
-              RAPIER.ColliderDesc.ball(scale),
-            body = world.createRigidBody(
-              RAPIER.RigidBodyDesc.kinematicPositionBased()
-                .setTranslation(x, y, zz)
-                .setRotation(group.quaternion),
+        let asteroidSource = null;
+        models.asteroid2.traverse((o) => {
+          if (o.isMesh && !asteroidSource) asteroidSource = o;
+        });
+        if (!asteroidSource)
+          throw new Error("Official asteroid geometry is missing");
+        // Instancing preserves all official geometry and transforms while avoiding
+        // hundreds of separate asteroid draw calls and shadow passes.
+        const batchSize = 10,
+          batchCount = 12;
+        const batches = Array.from({ length: batchCount }, () => ({
+          box: new THREE.Box3(),
+          padding: 0,
+        }));
+        if (!asteroidSource.geometry.boundingSphere)
+          asteroidSource.geometry.computeBoundingSphere();
+        const sourceRadius =
+          asteroidSource.geometry.boundingSphere.center.length() +
+          asteroidSource.geometry.boundingSphere.radius;
+        spaceInstances = batches.map(() =>
+          [0, 1].map(() => {
+            const mesh = new THREE.InstancedMesh(
+              asteroidSource.geometry,
+              asteroidSource.material,
+              batchSize,
             );
-          world.createCollider(c, body);
+            // Three r160 does not initialize InstancedMesh morph influences.
+            mesh.morphTargetInfluences =
+              asteroidSource.morphTargetInfluences?.slice() || [];
+            mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            z.group.add(mesh);
+            return mesh;
+          }),
+        );
+        const asteroidMatrix = new THREE.Matrix4();
+        let astAngle = 0;
+        for (let e = 0; e <= 120; e++) {
+          const radius = Math.max(1, 0.8 * Math.sqrt(e + 1.6));
+          astAngle += 2 * Math.asin(1 / radius);
+          // The official e=0 rotation divides by zero, so that group has an
+          // invalid transform and is not rendered. Retain its angle step only.
+          if (e === 0) continue;
+          const x = radius * Math.cos(astAngle) * 5.7,
+            y = radius * Math.sin(astAngle) * 5.7 + 3.5,
+            zz = -14 * radius + 15.8 + 0.3 * astAngle;
+          const scale = Math.max(0.001, 2 * Math.random());
+          const batchIndex = Math.floor((e - 1) / batchSize),
+            instanceIndex = (e - 1) % batchSize;
+          batches[batchIndex].box.expandByPoint(v(x, y, zz));
+          batches[batchIndex].padding = Math.max(
+            batches[batchIndex].padding,
+            scale * Math.max(5 * sourceRadius, 10 + 2 * sourceRadius),
+          );
+          const group = new THREE.Group();
+          group.position.set(x, y, zz);
+          group.rotation.y = (89 * -Math.PI) / e;
+          group.scale.setScalar(scale);
+          for (const [childScale, childY] of [
+            [5, 0],
+            [2, 10],
+          ]) {
+            const anchor = new THREE.Object3D();
+            anchor.scale.setScalar(childScale);
+            anchor.position.y = childY;
+            anchor.updateMatrix();
+            group.add(anchor);
+          }
+          z.group.add(group);
+          group.updateMatrix();
+          group.children.forEach((child, i) => {
+            asteroidMatrix.multiplyMatrices(group.matrix, child.matrix);
+            spaceInstances[batchIndex][i].setMatrixAt(
+              instanceIndex,
+              asteroidMatrix,
+            );
+          });
+          const body = world.createRigidBody(
+            RAPIER.RigidBodyDesc.kinematicPositionBased()
+              .setTranslation(x, y, zz)
+              .setRotation(group.quaternion),
+          );
+          // Keep the two collision shapes separate: a single convex hull around
+          // both would incorrectly fill the gap between the orbiting rocks.
+          for (const child of group.children) {
+            child.updateMatrix();
+            const transform = new THREE.Matrix4()
+              .makeScale(scale, scale, scale)
+              .multiply(child.matrix);
+            const pos = asteroidSource.geometry.attributes.position;
+            const vertices = new Float32Array(pos.count * 3);
+            const q = v();
+            for (let i = 0; i < pos.count; i++) {
+              q.fromBufferAttribute(pos, i).applyMatrix4(transform);
+              vertices[3 * i] = q.x;
+              vertices[3 * i + 1] = q.y;
+              vertices[3 * i + 2] = q.z;
+            }
+            const collider = RAPIER.ColliderDesc.convexHull(vertices);
+            if (collider) world.createCollider(collider, body);
+          }
           spaceAsteroids.push({
             mesh: group,
             body,
             speed: 0.001 + 0.0001 * e,
-            y,
-            phase: Math.random() * Math.PI * 2,
+            index: e,
+            batchIndex,
+            instanceIndex,
           });
         }
+        // Conservative bounds include the full orbit of the offset rock, so
+        // frustum and shadow culling never clip its animation.
+        batches.forEach((batch, i) => {
+          const sphere = batch.box.getBoundingSphere(new THREE.Sphere());
+          sphere.radius += batch.padding;
+          for (const mesh of spaceInstances[i]) {
+            mesh.boundingSphere = sphere.clone();
+            mesh.instanceMatrix.needsUpdate = true;
+          }
+        });
         const tank = safeMesh(models.paladin, 100),
           wrap = new THREE.Group();
         wrap.rotation.y = Math.PI / 2;
@@ -1868,6 +1948,13 @@
           const [min, max, dist] = zones[id].camera;
           controls.minDistance = min;
           controls.maxDistance = max;
+          controls.maxPolarAngle =
+            id === "cyber" ? Math.PI - 0.05 : Math.PI / 2 - 0.05;
+          // Clear residual OrbitControls damping from the previous scene.
+          const damping = controls.enableDamping;
+          controls.enableDamping = false;
+          controls.update();
+          controls.enableDamping = damping;
           let state = states[id] || {
             score: 0,
             elapsed: 0,
@@ -1898,10 +1985,26 @@
           if (id === "snow") player.mesh.position.y -= 1.5;
           if (id === "space") player.mesh.position.y -= 0.15;
           player.mesh.rotation.y = player.yaw;
-          camera.position
-            .copy(cameraStart)
-            .add(v(dist * 0.6, dist * 0.65, dist));
           controls.target.copy(cameraStart);
+          // Place the camera behind the tank's forward axis. Yaw is restored
+          // per scene, so revisiting a turned tank also starts behind it.
+          let initialOffset;
+          if (id === "cyber") {
+            initialOffset = v(0, 4, 12).applyAxisAngle(v(0, 1, 0), Math.PI);
+            const axis = v()
+              .crossVectors(v(0, 1, 0), initialOffset)
+              .normalize();
+            initialOffset.applyAxisAngle(axis, 0.4);
+            controls.target.y += 1.5;
+          } else if (id === "snow") {
+            initialOffset = v(-40, 35, 0);
+          } else if (id === "space") {
+            initialOffset = v(-Math.hypot(1, 2), 1.2, 0);
+          } else {
+            initialOffset = v(-Math.hypot(dist * 0.6, dist), dist * 0.65, 0);
+          }
+          initialOffset.applyAxisAngle(v(0, 1, 0), player.yaw);
+          camera.position.copy(cameraStart).add(initialOffset);
           if (id !== "cyber" && spectator) {
             camera.lookAt(cameraStart);
             camera.rotation.reorder("YXZ");
@@ -2215,19 +2318,27 @@
           cf.y = 0;
           cf.normalize();
           let right = v().crossVectors(cf, v(0, 1, 0));
-          target
-            .addScaledVector(cf, -joy.y || keyboard.f)
-            .addScaledVector(right, joy.x || -keyboard.t);
-          if (target.lengthSq() > 0.01) {
-            moving = true;
-            target.normalize().multiplyScalar(25);
+          if (Math.abs(joy.x) > 0.01 || Math.abs(joy.y) > 0.01) {
+            target.addScaledVector(cf, -joy.y).addScaledVector(right, joy.x);
+            if (target.lengthSq() > 0.01) {
+              moving = true;
+              target.normalize().multiplyScalar(25);
+              const desired = Math.atan2(target.x, target.z);
+              let turn = desired - player.yaw;
+              while (turn > Math.PI) turn -= 2 * Math.PI;
+              while (turn < -Math.PI) turn += 2 * Math.PI;
+              player.yaw += turn * (1 - Math.pow(1 - 0.1, dt * 60));
+            }
+          } else {
+            player.yaw += keyboard.t * 2 * dt;
+            if (keyboard.f) {
+              moving = true;
+              target
+                .set(0, 0, 1)
+                .applyAxisAngle(v(0, 1, 0), player.yaw)
+                .multiplyScalar(keyboard.f * 25);
+            }
           }
-          const look = moving ? target : cf;
-          const desired = Math.atan2(look.x, look.z);
-          let turn = desired - player.yaw;
-          while (turn > Math.PI) turn -= 2 * Math.PI;
-          while (turn < -Math.PI) turn += 2 * Math.PI;
-          player.yaw += turn * (1 - Math.pow(1 - 0.1, dt * 60));
         } else if (Math.abs(joy.x) > 0.01 || Math.abs(joy.y) > 0.01) {
           let cd = v();
           camera.getWorldDirection(cd);
@@ -2298,13 +2409,25 @@
           zones.halloween.mixer.update(dt);
           updateSkinnedColliders(zones.halloween);
         }
-        if (zone === "space")
+        if (zone === "space") {
+          const matrix = new THREE.Matrix4();
           for (const a of spaceAsteroids) {
+            // Official animation rotates the pair in place, without vertical bobbing.
             a.mesh.rotation.x += a.speed;
-            a.mesh.position.y = a.y + Math.sin(now * 0.5 + a.phase) * 1.5;
+            a.mesh.updateMatrix();
+            a.mesh.children.forEach((child, i) => {
+              matrix.multiplyMatrices(a.mesh.matrix, child.matrix);
+              spaceInstances[a.batchIndex][i].setMatrixAt(
+                a.instanceIndex,
+                matrix,
+              );
+            });
             a.body.setNextKinematicTranslation(a.mesh.position);
             a.body.setNextKinematicRotation(a.mesh.quaternion);
           }
+          for (const batch of spaceInstances)
+            for (const mesh of batch) mesh.instanceMatrix.needsUpdate = true;
+        }
         if (player) {
           if (respawnAnim) {
             if (running && !document.hidden) elapsed += actualDelta;
@@ -2567,7 +2690,7 @@
       $("about").onclick = () => {
         const names = {
           snow: tr("3D坦克和雪陷阱", "Tanki and The Snow Trap (Rework)"),
-          space: tr("航天日", "Cosmonautics Day"),
+          space: tr("太空中的坦克", "Tanks in Space"),
           cyber: tr("赛博坦克", "CyberTank"),
           halloween: tr("不给糖就捣蛋", "Trick or Treat"),
         };
@@ -2757,6 +2880,11 @@
             lastNonTouchDown = performance.now();
             return;
           }
+          // Pointer IDs can be reused after release; discard stale matches only
+          // when that ID begins a new gesture, not on an arbitrary short timeout.
+          for (let i = recentTouchClicks.length - 1; i >= 0; i--)
+            if (recentTouchClicks[i].pointerId === e.pointerId)
+              recentTouchClicks.splice(i, 1);
           const target = e.target.closest("button, #start-prompt");
           if (!target || target === jumpButton || target.disabled) return;
           uiTouches.set(e.pointerId, { target });
@@ -2777,11 +2905,7 @@
         const hit = document.elementFromPoint(e.clientX, e.clientY);
         if (!hit || !item.target.contains(hit)) return;
         const now = performance.now();
-        while (
-          recentTouchClicks.length &&
-          now - recentTouchClicks[0].time > 1000
-        )
-          recentTouchClicks.shift();
+        if (recentTouchClicks.length >= 64) recentTouchClicks.shift();
         recentTouchClicks.push({
           target: item.target,
           pointerId: e.pointerId,
@@ -2813,15 +2937,11 @@
           const now = performance.now();
           for (let i = recentTouchClicks.length - 1; i >= 0; i--) {
             const item = recentTouchClicks[i];
-            if (now - item.time > 1000) {
-              recentTouchClicks.splice(i, 1);
-              continue;
-            }
             if (
               (!noTouchInfo || lastNonTouchDown < item.time) &&
               (e.pointerId > 0
                 ? e.pointerId === item.pointerId
-                : item.target.contains(e.target))
+                : now - item.time < 10000 && item.target.contains(e.target))
             ) {
               recentTouchClicks.splice(i, 1);
               e.preventDefault();
@@ -2841,7 +2961,7 @@
 
       const labelMap = {
         cyber: tr("赛博坦克", "CyberTank"),
-        space: tr("航天日", "Cosmonautics Day"),
+        space: tr("太空中的坦克", "Tanks in Space"),
         halloween: tr("不给糖就捣蛋", "Trick or Treat"),
         snow: tr("3D坦克和雪陷阱", "3D Tank and the Snow Trap"),
       };
@@ -2877,5 +2997,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5315b95b960a9c6',t:'MTc5MzQzNjA1NQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5315b95b960a9c6',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5318d249f68f13a',t:'MTc5MzQzODA4NQ=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5318d249f68f13a',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
