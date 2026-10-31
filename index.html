@@ -946,6 +946,9 @@
       light.shadow.camera.bottom = -300;
       light.shadow.camera.far = 1000;
       scene.add(light);
+      const halloweenFill = new THREE.DirectionalLight(0x04030b, 1);
+      halloweenFill.visible = false;
+      scene.add(halloweenFill);
       const draco = new DRACOLoader();
       draco.setDecoderPath(
         "https://www.gstatic.com/draco/versioned/decoders/1.5.5/",
@@ -1137,6 +1140,61 @@
             colliderMesh(o);
           }
         });
+      }
+      // Rapier's trimesh is not a deformable body. Rebuild the triangle shape
+      // from Three.js's skinned vertices so the collision matches each rendered pose.
+      function buildSkinnedColliders(root, targetZone) {
+        targetZone.dynamicColliders = [];
+        root.updateMatrixWorld(true);
+        root.traverse((mesh) => {
+          if (!mesh.isSkinnedMesh || !mesh.geometry.attributes.position) return;
+          const pos = mesh.geometry.attributes.position;
+          const indices = mesh.geometry.index
+            ? Uint32Array.from(mesh.geometry.index.array)
+            : Uint32Array.from({ length: pos.count }, (_, i) => i);
+          const verts = new Float32Array(pos.count * 3);
+          const body = world.createRigidBody(
+            RAPIER.RigidBodyDesc.fixed().setTranslation(
+              targetZone.origin.x,
+              targetZone.origin.y,
+              targetZone.origin.z,
+            ),
+          );
+          const item = {
+            mesh,
+            body,
+            indices,
+            verts,
+            collider: null,
+            point: new THREE.Vector3(),
+          };
+          targetZone.dynamicColliders.push(item);
+        });
+        updateSkinnedColliders(targetZone);
+        for (const item of targetZone.dynamicColliders)
+          item.collider.setEnabled(false);
+      }
+      function updateSkinnedColliders(targetZone) {
+        if (!targetZone.dynamicColliders?.length) return;
+        targetZone.group.updateMatrixWorld(true);
+        for (const item of targetZone.dynamicColliders) {
+          const { mesh, verts, indices, point } = item;
+          for (let i = 0; i < verts.length / 3; i++) {
+            mesh
+              .getVertexPosition(i, point)
+              .applyMatrix4(mesh.matrixWorld)
+              .sub(targetZone.origin);
+            verts[3 * i] = point.x;
+            verts[3 * i + 1] = point.y;
+            verts[3 * i + 2] = point.z;
+          }
+          if (!item.collider)
+            item.collider = world.createCollider(
+              RAPIER.ColliderDesc.trimesh(verts, indices).setFriction(0.001),
+              item.body,
+            );
+          else item.collider.setShape(new RAPIER.TriMesh(verts, indices));
+        }
       }
       function safeMesh(gltfScene, scale = 1) {
         const g = new THREE.Group();
@@ -1466,7 +1524,8 @@
                 loadHDR(cdn + "darkmatter/venice_sunset_1k.hdr"),
               ),
           );
-        z.bg = textureSky(sky);
+        sky.colorSpace = THREE.SRGBColorSpace;
+        z.bg = null;
         environment.mapping = THREE.EquirectangularReflectionMapping;
         z.env = environment;
         const region = new THREE.Group();
@@ -1502,6 +1561,17 @@
           for (const clip of center.animations) z.mixer.clipAction(clip).play();
         }
         addTerrain(region);
+        buildSkinnedColliders(center.scene, z);
+        const skySphere = new THREE.Mesh(
+          new THREE.SphereGeometry(200, 60, 40),
+          new THREE.MeshBasicMaterial({
+            map: sky,
+            side: THREE.BackSide,
+            fog: false,
+          }),
+        );
+        skySphere.name = "official-halloween-sky";
+        region.add(skySphere);
         const src = tank.scene.getObjectByName("fishka");
         if (!src) throw Error("万圣节坦克模型缺失");
         const mesh = new THREE.Mesh(src.geometry, src.material);
@@ -1579,7 +1649,7 @@
           zone === "snow" || zone === "halloween" ? "" : "none";
         $("cam-toggle-btn").classList.toggle("active", autoCamera);
         $("cam-toggle-btn").title = tr("自动镜头", "Auto camera");
-        $("spectator-toggle").style.display = zone === "cyber" ? "" : "none";
+        $("spectator-toggle").style.display = "";
         $("spectator-toggle").classList.toggle("active", spectator);
         $("spectator-toggle").title = tr("切换观察视角", "Toggle spectator");
         $("respawn").title = tr("返回检查点", "Return to checkpoint");
@@ -1668,10 +1738,12 @@
         scene.background = null;
         scene.environment = null;
         if (z.group) z.group.visible = false;
+        for (const c of z.dynamicColliders || []) c.collider.setEnabled(false);
         for (const tex of texturesFor(z)) tex.dispose();
       }
       function restoreGraphics(z) {
         if (z.group) z.group.visible = true;
+        for (const c of z.dynamicColliders || []) c.collider.setEnabled(true);
         for (const tex of texturesFor(z)) {
           tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
           tex.needsUpdate = true;
@@ -1752,11 +1824,11 @@
           document.documentElement.dataset.zone = id;
           freePointers.clear();
           freeGesture = null;
-          controls.enabled = !(id === "cyber" && spectator);
-          controls.enablePan = false;
+          controls.enabled = !(id !== "cyber" && spectator);
+          controls.enablePan = id === "cyber" && spectator;
           $("touch-ui").classList.toggle(
             "spectator-hidden",
-            id === "cyber" && spectator,
+            id !== "cyber" && spectator,
           );
           document
             .querySelectorAll("button[data-zone]")
@@ -1811,11 +1883,20 @@
             .copy(cameraStart)
             .add(v(dist * 0.6, dist * 0.65, dist));
           controls.target.copy(cameraStart);
-          if (id === "cyber" && spectator) {
+          if (id !== "cyber" && spectator) {
             camera.lookAt(cameraStart);
             camera.rotation.reorder("YXZ");
           } else controls.update();
-          light.position.copy(cameraStart).add(v(50, 100, 50));
+          light.color.setHex(id === "halloween" ? 0xffffff : 0xffdfb0);
+          light.intensity = id === "halloween" ? 1 : 1.5;
+          light.position
+            .copy(cameraStart)
+            .add(id === "halloween" ? v(0, 1, 0) : v(50, 100, 50));
+          halloweenFill.visible = id === "halloween";
+          halloweenFill.position.copy(cameraStart).add(v(1, 1, 1));
+          halloweenFill.target.position.copy(cameraStart);
+          scene.add(halloweenFill.target);
+          halloweenFill.target.updateMatrixWorld();
           light.target.position.copy(cameraStart);
           scene.add(light.target);
           light.target.updateMatrixWorld();
@@ -1902,7 +1983,7 @@
         if (!silent) {
           camera.position.add(cameraTranslation);
           controls.target.add(cameraTranslation);
-          if (!(zone === "cyber" && spectator)) controls.update();
+          if (!spectator || zone === "cyber") controls.update();
         }
         lastGrounded = -1e4;
         jumpWasHeld = false;
@@ -2041,7 +2122,7 @@
         }
         let target = v(),
           moving = false;
-        if (Math.abs(joy.x) > 0.01 || Math.abs(joy.y) > 0.01) {
+        if (!spectator && (Math.abs(joy.x) > 0.01 || Math.abs(joy.y) > 0.01)) {
           let cd = v();
           camera.getWorldDirection(cd);
           cd.y = 0;
@@ -2058,8 +2139,8 @@
             player.yaw += Math.max(-4 * dt, Math.min(4 * dt, diff));
           }
         } else {
-          player.yaw += keyboard.t * 2 * dt;
-          if (keyboard.f) {
+          player.yaw += (spectator ? 0 : keyboard.t) * 2 * dt;
+          if (!spectator && keyboard.f) {
             moving = true;
             target
               .set(1, 0, 0)
@@ -2071,7 +2152,7 @@
           vx = vel.x,
           vy = vel.y,
           vz = vel.z;
-        if (keyboard.jump) {
+        if (!spectator && keyboard.jump) {
           target
             .set(1, 0, 0)
             .applyAxisAngle(v(0, 1, 0), player.yaw)
@@ -2194,8 +2275,10 @@
         const dt = Math.min(clock.getDelta(), 0.05),
           now = clock.elapsedTime;
         if (beamTexture && zone === "space") beamTexture.offset.y += 0.5 * dt;
-        if (zone === "halloween" && zones.halloween.mixer)
+        if (zone === "halloween" && zones.halloween.mixer) {
           zones.halloween.mixer.update(dt);
+          updateSkinnedColliders(zones.halloween);
+        }
         if (zone === "space")
           for (const a of spaceAsteroids) {
             a.mesh.rotation.x += a.speed;
@@ -2219,7 +2302,7 @@
               respawnAnim.endTarget,
               ease,
             );
-            if (!(zone === "cyber" && spectator)) controls.update();
+            if (!spectator || zone === "cyber") controls.update();
             if (t >= 1) {
               player.mesh.visible = true;
               respawnAnim = null;
@@ -2236,9 +2319,13 @@
           if (running) {
             elapsed += actualDelta;
             if (zone === "space") spaceMotion(dt, p);
-            else if (!(zone === "cyber" && spectator))
-              groundMotion(dt, p, grounded, now);
-            else if (p.y < zones.cyber.origin.y - 30) triggerRespawn();
+            else if (!spectator) groundMotion(dt, p, grounded, now);
+            else if (
+              (zone === "cyber" && p.y < zones.cyber.origin.y - 30) ||
+              (zone === "snow" && p.y < zones.snow.origin.y - 50) ||
+              (zone === "halloween" && p.y < zones.halloween.origin.y - 8)
+            )
+              triggerRespawn();
             if (respawnAnim) {
               renderer.render(scene, camera);
               return;
@@ -2259,7 +2346,7 @@
               },
               true,
             );
-          if (zone === "snow" || zone === "halloween") {
+          if (!spectator && (zone === "snow" || zone === "halloween")) {
             let angle = Math.atan2(
                 p.x - zones[zone].origin.x,
                 p.z - zones[zone].origin.z,
@@ -2276,7 +2363,7 @@
               camera.position.copy(controls.target).add(offset);
             }
           }
-          if (!(zone === "cyber" && spectator)) {
+          if (!spectator) {
             const offset = camera.position.clone().sub(controls.target);
             controls.target.lerp(
               p,
@@ -2284,7 +2371,7 @@
             );
             camera.position.copy(controls.target).add(offset);
           }
-          if (!(zone === "cyber" && spectator)) controls.update();
+          if (!spectator || zone === "cyber") controls.update();
           updateHUD();
         }
         renderer.render(scene, camera);
@@ -2344,7 +2431,9 @@
           d: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y),
         };
       }
-      const freeActive = () => zone === "cyber" && spectator && !loading;
+      const freeActive = () => zone !== "cyber" && spectator && !loading;
+      const freeScale = () =>
+        zone === "snow" ? 8 : zone === "space" ? 0.6 : 1;
       renderer.domElement.addEventListener("pointerdown", (e) => {
         if (!freeActive()) return;
         freePointers.set(e.pointerId, {
@@ -2367,8 +2456,8 @@
         p.y = e.clientY;
         if (freePointers.size === 1) {
           if (p.button === 2) {
-            camera.translateX(-dx * 0.05);
-            camera.translateY(dy * 0.05);
+            camera.translateX(-dx * 0.05 * freeScale());
+            camera.translateY(dy * 0.05 * freeScale());
           } else {
             camera.rotation.y -= dx * 0.004;
             camera.rotation.x = Math.max(
@@ -2379,9 +2468,9 @@
         } else if (freePointers.size === 2) {
           const now = freeTwoFinger();
           if (freeGesture && now) {
-            camera.translateX(-(now.x - freeGesture.x) * 0.05);
-            camera.translateY((now.y - freeGesture.y) * 0.05);
-            camera.translateZ(-(now.d - freeGesture.d) * 0.05);
+            camera.translateX(-(now.x - freeGesture.x) * 0.05 * freeScale());
+            camera.translateY((now.y - freeGesture.y) * 0.05 * freeScale());
+            camera.translateZ(-(now.d - freeGesture.d) * 0.05 * freeScale());
           }
           freeGesture = now;
         }
@@ -2397,7 +2486,7 @@
         (e) => {
           if (freeActive()) {
             e.preventDefault();
-            camera.translateZ(e.deltaY * 0.01);
+            camera.translateZ(e.deltaY * 0.01 * freeScale());
           }
         },
         { passive: false },
@@ -2406,21 +2495,31 @@
         if (freeActive()) e.preventDefault();
       });
       $("spectator-toggle").onclick = () => {
-        if (zone !== "cyber") return;
         spectator = !spectator;
-        keyboard.f = keyboard.t = 0;
-        keyboard.jump = false;
-        joy.x = joy.y = 0;
         freePointers.clear();
         freeGesture = null;
-        $("touch-ui").classList.toggle("spectator-hidden", spectator);
-        controls.enabled = !spectator;
-        controls.enablePan = false;
-        if (spectator) camera.rotation.reorder("YXZ");
-        else {
-          const pos = player.rigid.translation();
-          controls.target.set(pos.x, pos.y, pos.z);
-          controls.update();
+        if (zone === "cyber") {
+          // Restore the previous Cyber camera, including its original OrbitControls panning.
+          controls.enabled = true;
+          controls.enablePan = spectator;
+          $("touch-ui").classList.remove("spectator-hidden");
+        } else {
+          keyboard.f = keyboard.t = 0;
+          keyboard.jump = false;
+          joy.x = joy.y = 0;
+          $("touch-ui").classList.toggle("spectator-hidden", spectator);
+          controls.enabled = !spectator;
+          controls.enablePan = false;
+          if (spectator) camera.rotation.reorder("YXZ");
+          else {
+            const pos = player.rigid.translation();
+            cameraPrevAngle = Math.atan2(
+              pos.x - zones[zone].origin.x,
+              pos.z - zones[zone].origin.z,
+            );
+            controls.target.set(pos.x, pos.y, pos.z);
+            controls.update();
+          }
         }
         updateHUD();
       };
@@ -2615,5 +2714,5 @@
       $("load-back").textContent = tr("返回", "Back");
       animate();
     </script>
-  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5310e9b0bb21153',t:'MTc5MzQzMjkwMg=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5310e9b0bb21153',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+  <script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5312d060a3d1153',t:'MTc5MzQzNDE0OA=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5312d060a3d1153',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
