@@ -1342,43 +1342,350 @@
         cyber: {
           // The checked-in music is byte-identical to the official main.opus.
           music: "assets/cybertank/bounce tanki loop cut (no intro).opus",
+          loopMode: "beat",
           score: "assets/cybertank/move.mp3",
         },
         snow: {
           music: "assets/tanki-and-the-snow-trap/main.mp3",
+          loopMode: "crossfade",
           score: "assets/tanki-and-the-snow-trap/move.mp3",
           lap: "assets/tanki-and-the-snow-trap/checkpoint.mp3",
           jump: "assets/tanki-and-the-snow-trap/roll.mp3",
         },
         space: {
           music: cdn + "darkmatter/main.mp3",
+          loopMode: "beat",
           score: "assets/tanks-in-space/move.mp3",
         },
         halloween: {
           music: "assets/trick-or-treat/thm_3.mp3",
+          loopMode: "reverbTail",
           ambient: "assets/trick-or-treat/tree2.mp3",
           score: "assets/trick-or-treat/move.mp3",
         },
       };
-      let music = new Audio(),
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      let audioCtx = null;
+      const loopBufferCache = new Map();
+      function getAudioContext() {
+        if (!audioCtx && AudioCtx) audioCtx = new AudioCtx();
+        return audioCtx;
+      }
+      // Build sample-accurate gapless loop buffers for Web Audio API so neither
+      // HTMLAudioElement loop gaps nor MP3 encoder padding/fades break looping.
+      function buildSeamlessLoop(ctx, rawBuffer, mode) {
+        const sr = rawBuffer.sampleRate,
+          channels = rawBuffer.numberOfChannels,
+          len = rawBuffer.length;
+        if (mode === "reverbTail") {
+          // Halloween (100 BPM): 2-bar swell-in (0..4.8s) + 18-bar body (4.8..48s)
+          // + 2-bar reverb tail (48..52.8s). Keep the clean intro on first play,
+          // mix the 2-bar intro onto the 2-bar reverb tail, and loop [4.8s, 52.8s).
+          let s0 = 0;
+          outerStart: for (; s0 < len; s0++) {
+            for (let c = 0; c < channels; c++) {
+              if (Math.abs(rawBuffer.getChannelData(c)[s0]) > 2e-5)
+                break outerStart;
+            }
+          }
+          const bodyFrames = Math.round(48 * sr),
+            overlapFrames = Math.round(4.8 * sr),
+            outLen = bodyFrames + overlapFrames;
+          if (s0 + bodyFrames >= len) s0 = 0;
+          const tailFade = Math.round(0.05 * sr),
+            introFade = Math.round(0.02 * sr),
+            out = ctx.createBuffer(channels, outLen, sr);
+          for (let c = 0; c < channels; c++) {
+            const src = rawBuffer.getChannelData(c),
+              dst = out.getChannelData(c),
+              copyBody = Math.min(bodyFrames, Math.max(0, len - s0));
+            if (copyBody > 0) dst.set(src.subarray(s0, s0 + copyBody), 0);
+            for (let k = 0; k < introFade && k < bodyFrames; k++) {
+              dst[k] *= k / introFade;
+            }
+            const availTail = Math.min(
+                overlapFrames,
+                Math.max(0, len - (s0 + bodyFrames)),
+              ),
+              tailFadeStart = Math.max(0, availTail - tailFade);
+            for (let k = 0; k < overlapFrames; k++) {
+              let tailVal = k < availTail ? src[s0 + bodyFrames + k] : 0;
+              if (k >= tailFadeStart && availTail > tailFadeStart) {
+                tailVal *=
+                  1 - (k - tailFadeStart + 1) / (availTail - tailFadeStart);
+              }
+              let introVal = s0 + k < len ? src[s0 + k] : 0;
+              if (k < introFade) introVal *= k / introFade;
+              dst[bodyFrames + k] = tailVal + introVal;
+            }
+          }
+          return {
+            buffer: out,
+            loopStart: overlapFrames / sr,
+            loopEnd: out.duration,
+          };
+        }
+        if (mode === "crossfade") {
+          // Snow: strip MP3 leading/trailing padding, keep natural fade-in on first
+          // play, and equal-power crossfade the final 1.5s into [0.25s, 1.75s).
+          let s0 = 0,
+            s1 = len;
+          outerStart: for (; s0 < len; s0++) {
+            for (let c = 0; c < channels; c++) {
+              if (Math.abs(rawBuffer.getChannelData(c)[s0]) > 1e-4)
+                break outerStart;
+            }
+          }
+          outerEnd: for (; s1 > s0; s1--) {
+            for (let c = 0; c < channels; c++) {
+              if (Math.abs(rawBuffer.getChannelData(c)[s1 - 1]) > 1e-3)
+                break outerEnd;
+            }
+          }
+          if (s1 - s0 < 4 * sr) {
+            s0 = 0;
+            s1 = len;
+          }
+          const trimLen = s1 - s0,
+            headSkip = Math.round(0.25 * sr),
+            xfade = Math.round(1.5 * sr),
+            loopStartFrame = headSkip + xfade,
+            microIn = Math.min(Math.round(0.01 * sr), headSkip),
+            out = ctx.createBuffer(channels, trimLen, sr);
+          for (let c = 0; c < channels; c++) {
+            const src = rawBuffer.getChannelData(c),
+              dst = out.getChannelData(c);
+            dst.set(src.subarray(s0, s1));
+            for (let k = 0; k < microIn; k++) dst[k] *= k / microIn;
+            const denom = Math.max(1, xfade - 1);
+            for (let k = 0; k < xfade; k++) {
+              const phase = (0.5 * Math.PI * k) / denom;
+              dst[trimLen - xfade + k] =
+                src[s0 + trimLen - xfade + k] * Math.cos(phase) +
+                src[s0 + headSkip + k] * Math.sin(phase);
+            }
+          }
+          return {
+            buffer: out,
+            loopStart: loopStartFrame / sr,
+            loopEnd: out.duration,
+          };
+        }
+        if (mode === "ambient") {
+          const edge = Math.min(Math.round(0.01 * sr), len >> 2);
+          for (let c = 0; c < channels; c++) {
+            const data = rawBuffer.getChannelData(c);
+            for (let k = 0; k < edge; k++) {
+              const w = k / edge;
+              data[k] *= w;
+              data[len - 1 - k] *= w;
+            }
+          }
+          return {
+            buffer: rawBuffer,
+            loopStart: 0,
+            loopEnd: rawBuffer.duration,
+          };
+        }
+        // Beat-exact cut loops (Cyber Opus & Space MP3): strip any MP3/Opus codec
+        // delay/padding and apply a 3ms C1 step-removal ramp across the seam.
+        let s0 = 0,
+          s1 = len;
+        outerStart: for (; s0 < len; s0++) {
+          for (let c = 0; c < channels; c++) {
+            if (Math.abs(rawBuffer.getChannelData(c)[s0]) > 1e-3)
+              break outerStart;
+          }
+        }
+        outerEnd: for (; s1 > s0; s1--) {
+          for (let c = 0; c < channels; c++) {
+            if (Math.abs(rawBuffer.getChannelData(c)[s1 - 1]) > 1e-3)
+              break outerEnd;
+          }
+        }
+        if (s1 - s0 < sr) {
+          s0 = 0;
+          s1 = len;
+        }
+        const outLen = s1 - s0,
+          out =
+            s0 === 0 && s1 === len
+              ? rawBuffer
+              : ctx.createBuffer(channels, outLen, sr);
+        if (out !== rawBuffer) {
+          for (let c = 0; c < channels; c++) {
+            out
+              .getChannelData(c)
+              .set(rawBuffer.getChannelData(c).subarray(s0, s1));
+          }
+        }
+        const ramp = Math.min(Math.round(0.003 * sr), outLen >> 2);
+        for (let c = 0; c < channels; c++) {
+          const data = out.getChannelData(c),
+            delta = data[0] - data[outLen - 1];
+          for (let k = 0; k < ramp; k++) {
+            const w = 0.5 * (1 - Math.cos((Math.PI * (k + 1)) / ramp));
+            data[outLen - ramp + k] += 0.5 * delta * w;
+            data[ramp - 1 - k] -= 0.5 * delta * w;
+          }
+        }
+        return { buffer: out, loopStart: 0, loopEnd: out.duration };
+      }
+      function loadSeamlessLoop(url, mode) {
+        const ctx = getAudioContext();
+        if (!ctx) return Promise.reject(new Error("Web Audio unavailable"));
+        const key = `${mode}:${url}`;
+        let pending = loopBufferCache.get(key);
+        if (!pending) {
+          pending = fetch(url)
+            .then((res) => {
+              if (!res.ok) throw new Error(`${res.status} ${url}`);
+              return res.arrayBuffer();
+            })
+            .then((buf) => ctx.decodeAudioData(buf))
+            .then((decoded) => buildSeamlessLoop(ctx, decoded, mode))
+            .catch((err) => {
+              loopBufferCache.delete(key);
+              throw err;
+            });
+          loopBufferCache.set(key, pending);
+        }
+        return pending;
+      }
+      function preloadThemeAudio(zoneId) {
+        const paths = soundPaths[zoneId];
+        if (!paths || !AudioCtx) return;
+        loadSeamlessLoop(paths.music, paths.loopMode).catch(() => {});
+        if (paths.ambient) {
+          loadSeamlessLoop(paths.ambient, "ambient").catch(() => {});
+        }
+      }
+      function createLoopTrack(url, volume, mode) {
+        const track = {
+          offset: 0,
+          startedAt: 0,
+          source: null,
+          gain: null,
+          loopData: null,
+          fallbackAudio: null,
+          playing: false,
+          disposed: false,
+          loadPromise: loadSeamlessLoop(url, mode),
+          play() {
+            if (this.disposed) return;
+            this.playing = true;
+            const ctx = getAudioContext();
+            if (ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+            if (this.source) return;
+            if (this.fallbackAudio) {
+              this.fallbackAudio.play().catch(() => {});
+              return;
+            }
+            this.loadPromise
+              .then((loopData) => {
+                if (this.disposed || !this.playing || this.source) return;
+                const c = getAudioContext();
+                if (!c) return;
+                if (c.state !== "running") c.resume().catch(() => {});
+                const src = c.createBufferSource(),
+                  g = c.createGain(),
+                  now = c.currentTime;
+                src.buffer = loopData.buffer;
+                src.loop = true;
+                src.loopStart = loopData.loopStart;
+                src.loopEnd = loopData.loopEnd;
+                const startOffset = Math.min(
+                  Math.max(0, this.offset),
+                  Math.max(0, loopData.loopEnd - 1e-4),
+                );
+                if (startOffset > 0) {
+                  g.gain.setValueAtTime(0, now);
+                  g.gain.linearRampToValueAtTime(volume, now + 0.015);
+                } else {
+                  g.gain.setValueAtTime(volume, now);
+                }
+                src.connect(g);
+                g.connect(c.destination);
+                this.source = src;
+                this.gain = g;
+                this.startedAt = now;
+                this.loopData = loopData;
+                src.start(0, startOffset);
+              })
+              .catch(() => {
+                if (this.disposed) return;
+                if (!this.fallbackAudio) {
+                  const a = new Audio(url);
+                  a.loop = true;
+                  a.volume = volume;
+                  this.fallbackAudio = a;
+                }
+                if (this.playing) this.fallbackAudio.play().catch(() => {});
+              });
+          },
+          pause() {
+            this.playing = false;
+            if (this.fallbackAudio) this.fallbackAudio.pause();
+            if (!this.source) return;
+            const src = this.source,
+              g = this.gain,
+              c = getAudioContext();
+            this.source = null;
+            this.gain = null;
+            if (c && this.loopData) {
+              const elapsedPlay = Math.max(0, c.currentTime - this.startedAt),
+                rawPos = this.offset + elapsedPlay,
+                { loopStart, loopEnd } = this.loopData;
+              if (rawPos < loopEnd) {
+                this.offset = rawPos;
+              } else {
+                const span = Math.max(1e-3, loopEnd - loopStart);
+                this.offset = loopStart + ((rawPos - loopStart) % span);
+              }
+              if (c.state === "running") {
+                const now = c.currentTime;
+                if (typeof g.gain.cancelAndHoldAtTime === "function") {
+                  g.gain.cancelAndHoldAtTime(now);
+                } else {
+                  const cur = g.gain.value;
+                  g.gain.cancelScheduledValues(now);
+                  g.gain.setValueAtTime(cur, now);
+                }
+                g.gain.linearRampToValueAtTime(0, now + 0.012);
+                src.onended = () => g.disconnect();
+                try {
+                  src.stop(now + 0.013);
+                } catch {
+                  g.disconnect();
+                }
+                return;
+              }
+            }
+            try {
+              src.stop();
+            } catch {}
+            if (g) g.disconnect();
+          },
+          dispose() {
+            this.disposed = true;
+            this.pause();
+          },
+        };
+        return track;
+      }
+      let music = null,
         ambientAudio = null;
       const activeEffects = new Set();
-      music.loop = true;
-      music.volume = 0.4;
-      // 兜底：若 loop 属性在某些浏览器/格式下不生效或留下间隙，
-      // 在音轨结束后从开头重新播放，保证背景音乐无缝重复。
-      music.addEventListener(
-        "ended",
-        () => {
-          music.currentTime = 0;
-          if (running && soundEnabled && !document.hidden) {
-            music.play().catch(() => {});
-          }
-        },
-        { once: false },
-      );
+      function resumeThemeContext() {
+        if (!soundEnabled || !running || document.hidden) return;
+        if (audioCtx && audioCtx.state !== "running") {
+          audioCtx.resume().catch(() => {});
+        }
+      }
+      addEventListener("pointerdown", resumeThemeContext, { passive: true });
+      addEventListener("keydown", resumeThemeContext, { passive: true });
       function pauseThemeAudio(stopEffects = true) {
-        music.pause();
+        if (music) music.pause();
         if (ambientAudio) ambientAudio.pause();
         if (stopEffects) {
           for (const effect of activeEffects) effect.pause();
@@ -1387,32 +1694,20 @@
       }
       function playThemeAudio() {
         if (!soundEnabled || !running || document.hidden) return;
-        music.play().catch(() => {});
-        if (ambientAudio) ambientAudio.play().catch(() => {});
+        if (music) music.play();
+        if (ambientAudio) ambientAudio.play();
       }
       function switchMusic() {
         pauseThemeAudio();
+        if (music) music.dispose();
+        if (ambientAudio) ambientAudio.dispose();
         const paths = soundPaths[zone];
-        music = new Audio(paths.music);
-        music.loop = true;
-        music.volume = 0.4;
-        music.addEventListener(
-          "ended",
-          () => {
-            music.currentTime = 0;
-            if (running && soundEnabled && !document.hidden) {
-              music.play().catch(() => {});
-            }
-          },
-          { once: false },
-        );
-        ambientAudio = paths.ambient ? new Audio(paths.ambient) : null;
-        if (ambientAudio) {
-          ambientAudio.loop = true;
-          // Preserve the official 2:1 music-to-ambient ratio at the existing
-          // game music volume.
-          ambientAudio.volume = 0.2;
-        }
+        music = createLoopTrack(paths.music, 0.4, paths.loopMode);
+        // Preserve the official 2:1 music-to-ambient ratio at the existing
+        // game music volume.
+        ambientAudio = paths.ambient
+          ? createLoopTrack(paths.ambient, 0.2, "ambient")
+          : null;
         playThemeAudio();
       }
       function playSound(key) {
@@ -2225,6 +2520,7 @@
         // Allow the overlay to paint before cache hits or synchronous setup work.
         await new Promise((resolve) => requestAnimationFrame(resolve));
         try {
+          preloadThemeAudio(id);
           if (!zones[id].player) await loadZone[id]();
           else {
             $("loading-text").textContent = tr(
